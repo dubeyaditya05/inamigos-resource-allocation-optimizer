@@ -142,6 +142,12 @@ with planner_tab:
             result["allocation"], result["error"] = allocation, error
             if allocation is not None:
                 result["schedule"] = schedule_interventions(allocation[allocation.units > 0].copy(), int(volunteers), float(hours), horizon, ops)
+                scheduled_units = int(result["schedule"]["Units Started"].sum()) if not result["schedule"].empty else 0
+                allocated_units = int(allocation["units"].sum())
+                if scheduled_units != allocated_units:
+                    result["allocation"] = None
+                    result["schedule"] = pd.DataFrame()
+                    result["error"] = "The selected allocation could not be fully scheduled within the available working capacity. Reduce the allocation or adjust the planning inputs."
         st.session_state.plan = result
 
     plan = st.session_state.plan

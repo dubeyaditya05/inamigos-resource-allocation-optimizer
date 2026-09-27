@@ -12,7 +12,6 @@ OBJECTIVES = [
     "Education focus",
     "Community support focus",
     "Environment focus",
-    "Women & skills focus",
 ]
 
 
@@ -88,8 +87,7 @@ def _base_rows(cfg: dict, volunteers: int, distribution_item: str) -> list[dict]
             "volunteer_hours_per_unit": volunteers * float(ops["distribution_duration_hours"]),
             "elapsed_hours_per_unit": float(ops["distribution_duration_hours"]),
             "beneficiaries_per_unit": distribution_items, "priority_weight": float(weights.get("Project Seva", 1.1)),
-            "max_per_day": 1, "max_per_week": 2, "min_gap_days": 3, "min_volunteers": 1,
-            "split_allowed": False, "kind": "fixed",
+            "min_volunteers": 1, "split_allowed": False, "kind": "fixed",
         },
         {
             "project": "Project Bachpanshala", "intervention": "Bachpanshala Learning Cycle", "category": "Education",
@@ -98,31 +96,27 @@ def _base_rows(cfg: dict, volunteers: int, distribution_item: str) -> list[dict]
             "volunteer_hours_per_unit": education_team * session_hours,
             "elapsed_hours_per_unit": session_hours,
             "beneficiaries_per_unit": children, "priority_weight": float(weights.get("Project Bachpanshala", 1.35)),
-            "max_per_day": 1, "max_per_week": 2, "min_gap_days": 3, "min_volunteers": education_team,
-            "split_allowed": False, "kind": "fixed",
+            "min_volunteers": education_team, "split_allowed": False, "kind": "fixed",
         },
         {
             "project": "Project Prakriti", "intervention": "Prakriti Plantation Activity", "category": "Environment",
             "unit_description": f"1 plantation activity with {int(ops['plantation_saplings_per_activity'])} saplings",
             "cost_per_unit": float(rates["Sapling"]) * int(ops["plantation_saplings_per_activity"]),
             "volunteer_hours_per_unit": float(ops["plantation_volunteer_hours"]),
-            "elapsed_hours_per_unit": 0.0,
+            "elapsed_hours_per_unit": None,
             "beneficiaries_per_unit": 0, "priority_weight": float(weights.get("Project Prakriti", 1.05)),
-            "max_per_day": 1, "max_per_week": 1, "min_gap_days": 5, "min_volunteers": 1,
-            "split_allowed": True, "kind": "workload",
+            "min_volunteers": 1, "split_allowed": True, "kind": "workload",
         },
         {
             "project": "Project Prakriti", "intervention": "Prakriti School/Community Clean-up", "category": "Environment",
             "unit_description": "1 school/community clean-up activity",
             "cost_per_unit": float(rates["School Cleaning Materials"]),
             "volunteer_hours_per_unit": float(ops["cleaning_volunteer_hours"]),
-            "elapsed_hours_per_unit": 0.0,
+            "elapsed_hours_per_unit": None,
             "beneficiaries_per_unit": 0, "priority_weight": float(weights.get("Project Prakriti", 1.0)),
-            "max_per_day": 1, "max_per_week": 1, "min_gap_days": 5, "min_volunteers": 1,
-            "split_allowed": True, "kind": "workload",
+            "min_volunteers": 1, "split_allowed": True, "kind": "workload",
         },
     ]
-
 
 def build_programme_interventions(cfg: dict, volunteers: int, distribution_item: str) -> pd.DataFrame:
     rows = _base_rows(cfg, volunteers, distribution_item)
@@ -152,24 +146,19 @@ def _score(row: pd.Series, objective: str) -> float:
         return (reach * 4 + 100) if category == "Community" else reach * 0.15 + priority
     if objective == "Environment focus":
         return (reach * 2 + 100) if category == "Environment" else reach * 0.15 + priority
-    if objective == "Women & skills focus":
-        return 10 if row["project"] in ("Project Udaan", "Project Vikas") else reach * 0.15 + priority
     return reach * priority + 100
 
 
 def _max_units(row: pd.Series, days: int, volunteers: int, hours_per_day: float) -> int:
-    weeks = math.ceil(days / 5)
-    cap = min(int(row["max_per_week"]) * weeks, int(row["max_per_day"]) * days)
     if volunteers < int(row["min_volunteers"]):
         return 0
-    if not bool(row["split_allowed"]) and float(row["elapsed_hours_per_unit"]) > hours_per_day + 1e-9:
-        return 0
-    if bool(row["split_allowed"]):
-        total_hours = volunteers * hours_per_day * days
-        return min(cap, math.floor(total_hours / max(float(row["volunteer_hours_per_unit"]), 1e-9)))
-    parallel = max(1, volunteers // int(row["min_volunteers"]))
-    return min(cap, parallel * days)
-
+    daily_capacity = volunteers * hours_per_day
+    if not bool(row["split_allowed"]):
+        if float(row["elapsed_hours_per_unit"]) > hours_per_day + 1e-9:
+            return 0
+        return math.floor((daily_capacity * days) / max(float(row["volunteer_hours_per_unit"]), 1e-9))
+    total_hours = daily_capacity * days
+    return math.floor(total_hours / max(float(row["volunteer_hours_per_unit"]), 1e-9))
 
 def optimize_programme(df: pd.DataFrame, budget: float, volunteers: int, hours_per_day: float, horizon_days_count: int, objective: str, ops: dict):
     if df.empty:
@@ -186,7 +175,6 @@ def optimize_programme(df: pd.DataFrame, budget: float, volunteers: int, hours_p
     if work.empty:
         return None, "No complete intervention fits the available volunteer capacity and planning horizon."
 
-    # Balanced plans deliberately seed distinct categories before filling remaining capacity.
     chosen = {i: 0 for i in work.index}
     remaining_budget = float(budget)
     remaining_hours = float(volunteers * hours_per_day * horizon_days_count)
@@ -201,7 +189,18 @@ def optimize_programme(df: pd.DataFrame, budget: float, volunteers: int, hours_p
                 if len(categories) >= min(3, work["category"].nunique()):
                     break
 
-    ranked = work.assign(value=work["score"] / work["cost_per_unit"].replace(0, 1)).sort_values(["value", "score"], ascending=False)
+    value = work["score"] / work["cost_per_unit"].replace(0, 1)
+    if objective == "Education focus":
+        utility = work["category"].eq("Education").astype(float) * 1000 + value
+    elif objective == "Community support focus":
+        utility = work["category"].eq("Community").astype(float) * 1000 + value
+    elif objective == "Environment focus":
+        utility = work["category"].eq("Environment").astype(float) * 1000 + value
+    elif objective == "Maximum reach":
+        utility = work["beneficiaries_per_unit"] / work["cost_per_unit"].replace(0, 1)
+    else:
+        utility = value
+    ranked = work.assign(utility=utility, value=value).sort_values(["utility", "score"], ascending=False)
     changed = True
     while changed:
         changed = False
@@ -226,77 +225,66 @@ def optimize_programme(df: pd.DataFrame, budget: float, volunteers: int, hours_p
 
 def schedule_interventions(active: pd.DataFrame, volunteers: int, hours_per_day: float, horizon: PlanningHorizon, ops: dict) -> pd.DataFrame:
     columns = ["Day", "Day Number", "Week", "Week Number", "Intervention", "Project", "Units Started", "Volunteer Hours", "Elapsed Hours", "Allocated Budget", "Planned Capacity"]
-    if active.empty:
+    if active.empty or volunteers <= 0 or hours_per_day <= 0:
         return pd.DataFrame(columns=columns)
 
-    capacity_by_day = [float(volunteers * hours_per_day)] * horizon.days
-    starts = []
-    last_start = {}
-    weekly_count = {}
+    daily_capacity = float(volunteers * hours_per_day)
     used_by_day = [0.0] * horizon.days
-    # Stable project/intervention ordering keeps output deterministic.
+    starts = []
+    # Schedule complete, non-splittable activities first. This prevents a long
+    # workload activity from consuming every day before fixed sessions are placed.
     rows = active.sort_values(["project", "intervention"]).to_dict("records")
-    for row in rows:
+    fixed = [r for r in rows if not bool(r["split_allowed"])]
+    split = [r for r in rows if bool(r["split_allowed"])]
+
+    def add_fixed_unit(row, unit_no, day):
+        work = float(row["volunteer_hours_per_unit"])
+        used_by_day[day] += work
+        starts.append({
+            "Day": f"Day {day + 1}", "Day Number": day + 1, "Week": f"Week {day // 5 + 1}", "Week Number": day // 5 + 1,
+            "Intervention": row["intervention"], "Project": row["project"], "Units Started": 1,
+            "Volunteer Hours": work, "Elapsed Hours": float(row["elapsed_hours_per_unit"]),
+            "Allocated Budget": float(row["cost_per_unit"]), "Planned Capacity": float(row["beneficiaries_per_unit"]),
+        })
+
+    for row in fixed:
         units = int(row["units"])
         for unit_no in range(units):
-            name = row["intervention"]
-            min_gap = int(row["min_gap_days"])
-            week_limit = int(row["max_per_week"])
-            candidates = []
-            for d in range(horizon.days):
-                if last_start.get(name, -10_000) + min_gap > d:
-                    continue
-                w = d // 5 + 1
-                if weekly_count.get((w, name), 0) >= week_limit:
-                    continue
-                if used_by_day[d] + float(row["volunteer_hours_per_unit"]) > capacity_by_day[d] + 1e-9 and not bool(row["split_allowed"]):
-                    continue
-                candidates.append(d)
+            candidates = [d for d in range(horizon.days) if used_by_day[d] + float(row["volunteer_hours_per_unit"]) <= daily_capacity + 1e-9]
             if not candidates:
-                # For split workloads, place work on the earliest available day and let it span days.
-                if bool(row["split_allowed"]):
-                    remaining = float(row["volunteer_hours_per_unit"])
-                    start = next((d for d in range(horizon.days) if last_start.get(name, -10_000) + min_gap <= d and weekly_count.get((d // 5 + 1, name), 0) < week_limit), None)
-                    if start is None:
-                        continue
-                    d = start
-                    started = False
-                    while remaining > 1e-9 and d < horizon.days:
-                        available = capacity_by_day[d] - used_by_day[d]
-                        work = min(remaining, max(0.0, available))
-                        if work > 1e-9:
-                            used_by_day[d] += work
-                            rows_out = {
-                                "Day": f"Day {d + 1}", "Day Number": d + 1, "Week": f"Week {d // 5 + 1}", "Week Number": d // 5 + 1,
-                                "Intervention": name, "Project": row["project"], "Units Started": 1 if not started else 0,
-                                "Volunteer Hours": work, "Elapsed Hours": work / volunteers, "Allocated Budget": float(row["cost_per_unit"]) if not started else 0.0,
-                                "Planned Capacity": float(row["beneficiaries_per_unit"]) if not started else 0.0,
-                            }
-                            starts.append(rows_out)
-                            started = True
-                            remaining -= work
-                        d += 1
-                    if remaining <= 1e-9:
-                        last_start[name] = start
-                        weekly_count[(start // 5 + 1, name)] = weekly_count.get((start // 5 + 1, name), 0) + 1
-                    continue
                 continue
-            # Spread complete units across the horizon rather than stacking them at the beginning.
+            # Evenly distribute starts across the horizon while preferring lower-load days.
             target = int(round((unit_no + 1) * (horizon.days - 1) / max(1, units)))
-            d = min(candidates, key=lambda x: (abs(x - target), used_by_day[x], x))
-            used_by_day[d] += float(row["volunteer_hours_per_unit"])
-            last_start[name] = d
-            w = d // 5 + 1
-            weekly_count[(w, name)] = weekly_count.get((w, name), 0) + 1
-            starts.append({
-                "Day": f"Day {d + 1}", "Day Number": d + 1, "Week": f"Week {w}", "Week Number": w,
-                "Intervention": name, "Project": row["project"], "Units Started": 1,
-                "Volunteer Hours": float(row["volunteer_hours_per_unit"]), "Elapsed Hours": float(row["elapsed_hours_per_unit"]),
-                "Allocated Budget": float(row["cost_per_unit"]), "Planned Capacity": float(row["beneficiaries_per_unit"]),
-            })
+            day = min(candidates, key=lambda d: (abs(d - target), used_by_day[d], d))
+            add_fixed_unit(row, unit_no, day)
+
+    # Then fill remaining capacity with split workloads. A unit may span days;
+    # each row records the actual volunteer-hours and elapsed time for that day.
+    for row in split:
+        for unit_no in range(int(row["units"])):
+            remaining = float(row["volunteer_hours_per_unit"])
+            unit_rows = []
+            for d in range(horizon.days):
+                if remaining <= 1e-9:
+                    break
+                available = max(0.0, daily_capacity - used_by_day[d])
+                if available <= 1e-9:
+                    continue
+                work = min(remaining, available)
+                unit_rows.append({
+                    "Day": f"Day {d + 1}", "Day Number": d + 1, "Week": f"Week {d // 5 + 1}", "Week Number": d // 5 + 1,
+                    "Intervention": row["intervention"], "Project": row["project"], "Units Started": 1 if not unit_rows else 0,
+                    "Volunteer Hours": work, "Elapsed Hours": work / volunteers,
+                    "Allocated Budget": float(row["cost_per_unit"]) if not unit_rows else 0.0,
+                    "Planned Capacity": float(row["beneficiaries_per_unit"]) if not unit_rows else 0.0,
+                })
+                remaining -= work
+            if remaining <= 1e-9:
+                for item in unit_rows:
+                    used_by_day[item["Day Number"] - 1] += float(item["Volunteer Hours"])
+                starts.extend(unit_rows)
 
     return pd.DataFrame(starts, columns=columns).sort_values(["Day Number", "Project", "Intervention"]).reset_index(drop=True) if starts else pd.DataFrame(columns=columns)
-
 
 def quick_impact(rates: dict, item: str, budget: float) -> tuple[int, float]:
     price = float(rates[item])
