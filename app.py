@@ -107,54 +107,50 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .stApp,
-    [data-testid="stAppViewContainer"],
-    [data-testid="stMainBlockContainer"] {
-        background: var(--background-color) !important;
-        color: var(--text-color) !important;
+    :root { color-scheme: light !important; }
+    html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"] {
+        background: #f5f8f7 !important;
+        color: #17212b !important;
     }
-    [data-testid="stHeader"] {
-        background: var(--background-color) !important;
-        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
-    }
-    [data-testid="stSidebar"] {
-        background: var(--secondary-background-color) !important;
-    }
+    [data-testid="stHeader"] { background: #ffffff !important; border-bottom: 1px solid #dbe5e1 !important; }
+    [data-testid="stSidebar"] { background: #ffffff !important; }
+    .block-container { max-width: 1400px; padding-top: 1.5rem; }
     .brand-card {
-        background: var(--secondary-background-color);
-        border: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
-        border-radius: 14px;
-        padding: 16px 18px;
+        background: #ffffff; border: 1px solid #d7e3df; border-radius: 12px;
+        padding: 13px 16px; min-height: 54px;
     }
-    .title { font-size: 2rem; font-weight: 750; line-height: 1.1; }
-    .subtitle { opacity: .72; margin-top: 5px; }
-    .section { font-size: 1.18rem; font-weight: 720; margin: 18px 0 9px; }
+    .title { font-size: 2rem; font-weight: 760; line-height: 1.1; color: #17212b; }
+    .subtitle { color: #667784; margin-top: 5px; }
+    .section { font-size: 1.18rem; font-weight: 760; margin: 18px 0 9px; color: #17212b; }
     .pill {
-        display: inline-block;
-        padding: 6px 11px;
-        border-radius: 999px;
-        color: var(--primary-color) !important;
-        border: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent);
-        background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-        font-size: .78rem;
-        font-weight: 700;
+        display: inline-block; padding: 7px 14px; border-radius: 999px;
+        color: #008f6b !important; border: 1px solid #cce8df; background: #eaf7f2;
+        font-size: .82rem; font-weight: 750;
     }
-    .small { opacity: .68; font-size: .82rem; }
-    .stButton > button[kind="primary"] {
-        background: var(--primary-color) !important;
-        color: #fff !important;
-        border: 1px solid var(--primary-color) !important;
-        border-radius: 9px;
-        font-weight: 720;
-        min-height: 44px;
+    .small { color: #667784; font-size: .82rem; }
+    .stButton > button, .stFormSubmitButton > button,
+    [data-testid="stDownloadButton"] > button {
+        background: #00a878 !important; color: #ffffff !important;
+        border: 1px solid #00a878 !important; border-radius: 9px !important;
+        font-weight: 750 !important; min-height: 44px;
     }
-    .stButton > button[kind="primary"]:hover {
-        filter: brightness(.94);
+    .stButton > button:hover, .stFormSubmitButton > button:hover,
+    [data-testid="stDownloadButton"] > button:hover { background: #008f6b !important; border-color: #008f6b !important; }
+    [data-testid="stNumberInput"] input, [data-testid="stTextInput"] input,
+    [data-testid="stSelectbox"] > div, [data-testid="stTextArea"] textarea,
+    [data-testid="stFileUploaderDropzone"] {
+        background: #ffffff !important; color: #17212b !important; border-color: #d7e3df !important;
     }
+    [data-testid="stMetric"] { background: #ffffff; border: 1px solid #d7e3df; border-radius: 12px; padding: 12px; }
+    [data-testid="stDataFrame"] { background: #ffffff !important; border: 1px solid #d7e3df; border-radius: 10px; }
+    .success-card { background:#eaf7f2; border:1px solid #cce8df; color:#007d5f; border-radius:12px; padding:14px 16px; }
+    .calendar-row {
+        background:#ffffff; border:1px solid #d7e3df; border-radius:10px;
+        padding:11px 14px; margin:7px 0;
+    }
+    .calendar-week { font-weight:750; }
     @media (max-width: 800px) {
-        .title { font-size: 1.45rem; }
-        .subtitle { font-size: .88rem; }
-        .section { font-size: 1.05rem; }
+        .title { font-size: 1.45rem; } .subtitle { font-size: .88rem; } .section { font-size: 1.05rem; }
     }
     </style>
     """,
@@ -202,40 +198,24 @@ with planner_tab:
     with input_cols[4]:
         objective = st.selectbox("Planning Objective", OBJECTIVES, index=1, key="objective")
 
-    input2 = st.columns(2)
+    input2 = st.columns([1, 3])
     with input2[0]:
         distribution_item = st.selectbox("Distribution Item", distribution_items, index=min(distribution_items.index("Stationery Kit"), len(distribution_items)-1), key="distribution_item")
     with input2[1]:
         st.markdown(
-            f'<div class="brand-card"><b>Current delivery model</b><br><span class="small">Education: 30 children + matching stationery • Distribution: {ops["distribution_items_per_volunteer_per_hour"]:.0f} items/volunteer/hour • Working day: {hours_per_day:.1f} hours</span></div>',
+            f'<div class="brand-card"><b>Current delivery model</b><br><span class="small">Education: 30 children + matching stationery &nbsp;•&nbsp; Distribution: {ops["distribution_items_per_volunteer_per_hour"]:.0f} items / volunteer / hour &nbsp;•&nbsp; Working day: {hours_per_day:.1f} hours</span></div>',
             unsafe_allow_html=True,
         )
 
     horizon = horizon_days(horizon_label, ops, float(budget))
-    st.markdown('<div class="section">Intervention Portfolio</div>', unsafe_allow_html=True)
     interventions = build_programme_interventions(cfg, int(volunteers), distribution_item)
-    portfolio = interventions[["intervention", "category", "cost_per_unit", "volunteer_hours_per_unit", "beneficiaries_per_unit", "max_per_week", "min_gap_days"]].copy()
-    portfolio.columns = ["Intervention", "Category", "Cost / Unit", "Volunteer Hours / Unit", "Capacity / Unit", "Max / Week", "Min Gap (Days)"]
-    st.dataframe(
-        portfolio,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Cost / Unit": st.column_config.NumberColumn(format="₹%,.0f"),
-            "Volunteer Hours / Unit": st.column_config.NumberColumn(format="%.2f"),
-            "Capacity / Unit": st.column_config.NumberColumn(format="%.0f"),
-        },
-    )
-    with st.expander("View intervention definitions"):
-        for _, row in interventions.iterrows():
-            st.write(f"**{row['intervention']}** — {row['unit_description']}")
-
+    st.markdown('<div style="margin-top:14px"></div>', unsafe_allow_html=True)
     if st.button("Run Allocation", type="primary", use_container_width=True):
         result = {"budget": float(budget), "volunteers": int(volunteers), "hours_per_day": float(hours_per_day), "horizon": horizon, "objective": objective, "distribution_item": distribution_item, "allocation": None, "schedule": pd.DataFrame(), "error": None}
         if budget == 0:
             result["schedule"] = volunteer_only_options(cfg, int(volunteers), float(hours_per_day))
         elif volunteers <= 0:
-            result["error"] = "No volunteer capacity is available for programme delivery. Use Quick Impact for direct-support quantities or add volunteers."
+            result["error"] = "No volunteer capacity is available for programme delivery. Add volunteers to build a field programme."
         else:
             allocation, error = optimize_programme(interventions, float(budget), int(volunteers), float(hours_per_day), horizon.days, objective, ops)
             if allocation is not None and int(allocation["units"].sum()) == 0:
@@ -248,7 +228,7 @@ with planner_tab:
 
     plan = st.session_state.plan
     if plan is None:
-        st.markdown('<div class="brand-card">Set the planning inputs and run an allocation to build a programme portfolio and calendar.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="brand-card">Set the planning inputs and run an allocation to build a practical programme and calendar.</div>', unsafe_allow_html=True)
     elif plan["allocation"] is None:
         if plan["budget"] == 0:
             st.markdown('<div class="section">Volunteer-Led Options</div>', unsafe_allow_html=True)
@@ -271,45 +251,47 @@ with planner_tab:
         used_budget = float(active.allocated_budget.sum())
         used_hours = float(active.volunteer_hours.sum())
         capacity = float(active.planned_beneficiaries.sum())
-        schedule = plan["schedule"]
+        schedule = plan["schedule"].copy()
         k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("Budget Used", money(used_budget))
         k2.metric("Budget Remaining", money(max(0, plan["budget"] - used_budget)))
-        k3.metric("Volunteer Hours", f"{used_hours:,.2f}")
+        k3.metric("Volunteer Hours", f"{used_hours:,.0f}")
         k4.metric("Planned Direct Capacity", f"{capacity:,.0f}")
         k5.metric("Active Interventions", f"{len(active)}")
 
         st.markdown('<div class="section">Recommended Programme</div>', unsafe_allow_html=True)
-        table = active[["intervention", "category", "units", "allocated_budget", "volunteer_hours", "planned_beneficiaries"]].copy()
-        table.columns = ["Intervention", "Category", "Complete Units", "Allocated Budget", "Volunteer Hours", "Planned Capacity"]
-        st.dataframe(table, use_container_width=True, hide_index=True, column_config={"Allocated Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.2f"), "Planned Capacity": st.column_config.NumberColumn(format="%.0f")})
+        schedule_by_name = {}
+        if not schedule.empty:
+            for name, g in schedule.groupby("Intervention"):
+                starts = int(g["Units Started"].sum())
+                schedule_by_name[name] = f"{starts} / week" if starts else "Scheduled"
+        table = active[["intervention", "category", "units", "allocated_budget", "volunteer_hours", "planned_beneficiaries", "max_per_week"]].copy()
+        table["schedule"] = table.apply(lambda r: schedule_by_name.get(r["intervention"], f"{int(r['max_per_week'])} / week"), axis=1)
+        table = table[["intervention", "category", "units", "allocated_budget", "volunteer_hours", "planned_beneficiaries", "schedule"]]
+        table.columns = ["Intervention", "Category", "Complete Units", "Budget", "Volunteer Hours", "Capacity", "Schedule"]
+        st.dataframe(table, use_container_width=True, hide_index=True, column_config={"Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.0f"), "Capacity": st.column_config.NumberColumn(format="%.0f")})
 
         if plan["budget"] > used_budget + 0.01:
-            st.info(f"{money(plan['budget'] - used_budget)} remains unallocated because the current programme portfolio is constrained by complete intervention units, weekly cadence and available delivery capacity. Review Direct-Support options rather than forcing partial activities.")
+            st.markdown(f'<div class="success-card">{money(plan["budget"] - used_budget)} remains unallocated under the current programme cadence and delivery capacity. The system does not force partial or impractical activities.</div>', unsafe_allow_html=True)
 
         if not schedule.empty:
-            st.markdown('<div class="section">Programme Calendar</div>', unsafe_allow_html=True)
-            schedule["Day Number"] = schedule["Day"].str.extract(r"(\d+)")[0].astype(int)
-            weekly = schedule.groupby("Week", sort=True).agg(
-                Activities=("Intervention", "nunique"),
-                Units=("Units Started", "sum"),
-                Budget=("Allocated Budget", "sum"),
-                VolunteerHours=("Volunteer Hours", "sum"),
-                PlannedCapacity=("Planned Capacity", "sum"),
-            ).reset_index()
-            st.dataframe(weekly, use_container_width=True, hide_index=True, column_config={"Budget": st.column_config.NumberColumn(format="₹%,.0f"), "VolunteerHours": st.column_config.NumberColumn(format="%.2f"), "PlannedCapacity": st.column_config.NumberColumn(format="%.0f")})
-            with st.expander("View detailed schedule"):
-                detail = schedule.drop(columns="Day Number")
-                st.dataframe(detail, use_container_width=True, hide_index=True, column_config={"Allocated Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.2f"), "Elapsed Hours": st.column_config.NumberColumn(format="%.2f"), "Planned Capacity": st.column_config.NumberColumn(format="%.0f")})
+            # Always use numeric day/week ordering; never lexicographic ordering such as Week 11 before Week 2.
+            schedule["_day_number"] = schedule["Day"].str.extract(r"(\d+)")[0].astype(int)
+            schedule["_week_number"] = schedule["Week"].str.extract(r"(\d+)")[0].astype(int)
+            schedule = schedule.sort_values(["_day_number", "_week_number", "Intervention"]).reset_index(drop=True)
 
+            st.markdown(f'<div class="section">Programme Calendar — {plan["horizon"].days // int(ops["working_days_per_week"])} Weeks</div>', unsafe_allow_html=True)
             weeks = []
-            for week_name, group in schedule.groupby("Week", sort=True):
-                names = ", ".join(dict.fromkeys(group["Intervention"].tolist()))
-                week_no = int(str(week_name).split()[-1])
-                focus = "Programme launch and field setup" if week_no == 1 else ("Progress review and impact update" if week_no % 4 == 0 else "Delivery and field documentation")
-                weeks.append({"Period": week_name, "Programme focus": names, "Communication focus": focus})
-            st.markdown('<div class="section">Communication Timeline</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(weeks), use_container_width=True, hide_index=True)
+            for week_no, group in schedule.groupby("_week_number", sort=True):
+                names = " • ".join(dict.fromkeys(group.sort_values("_day_number")["Intervention"].tolist()))
+                focus = "Launch & field setup" if week_no == 1 else ("Progress & impact update" if week_no % 4 == 0 else "Field documentation")
+                weeks.append({"Week": f"Week {week_no}", "Activities": names, "Focus": focus})
+            for item in weeks:
+                st.markdown(f'<div class="calendar-row"><span class="calendar-week">{item["Week"]}</span>&nbsp;&nbsp;&nbsp; {item["Activities"]}<span style="float:right;color:#667784">{item["Focus"]}</span></div>', unsafe_allow_html=True)
+
+            with st.expander("View detailed schedule"):
+                detail = schedule.drop(columns=["_day_number", "_week_number"])
+                st.dataframe(detail, use_container_width=True, hide_index=True, column_config={"Allocated Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.0f"), "Elapsed Hours": st.column_config.NumberColumn(format="%.2f"), "Planned Capacity": st.column_config.NumberColumn(format="%.0f")})
 
         st.markdown('<div class="section">Programme Communication</div>', unsafe_allow_html=True)
         selected = st.selectbox("Select an intervention", active["intervention"].tolist(), key="content_intervention")

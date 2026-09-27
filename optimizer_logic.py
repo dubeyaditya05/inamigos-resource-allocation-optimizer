@@ -340,7 +340,13 @@ def schedule_interventions(
         if remaining > 1e-9:
             return pd.DataFrame(columns=columns)
 
-    return pd.DataFrame(rows, columns=columns)
+    result = pd.DataFrame(rows, columns=columns)
+    if result.empty:
+        return result
+    result["_day_number"] = result["Day"].str.extract(r"(\d+)")[0].astype(int)
+    result["_week_number"] = result["Week"].str.extract(r"(\d+)")[0].astype(int)
+    result = result.sort_values(["_day_number", "_week_number", "Intervention"]).drop(columns=["_day_number", "_week_number"]).reset_index(drop=True)
+    return result
 
 
 def optimize_programme(

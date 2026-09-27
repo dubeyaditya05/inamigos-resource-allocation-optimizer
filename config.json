@@ -30,7 +30,7 @@
     "weeks_per_month": 4,
     "learning_session_hours": 5,
     "learning_volunteers_per_team": 3,
-    "learning_teams_per_session": 3,
+    "learning_teams_per_session": 1,
     "learning_children_per_session": 30,
     "stationery_recipients_per_education_cycle": 30,
     "cleaning_volunteer_hours": 20,

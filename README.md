@@ -11,3 +11,6 @@ Streamlit application for planning NGO interventions from budget, volunteer capa
 
 ## Streamlit Cloud
 Deploy `app.py` as the main file. Keep all files in the same repository root.
+
+
+UI note: The application is intentionally light-theme only, with green primary actions. Programme calendar and detailed schedule are ordered numerically by day/week.
