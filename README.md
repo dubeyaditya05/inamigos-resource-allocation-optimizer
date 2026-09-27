@@ -1,16 +1,21 @@
 # InAmigos Resource Allocation Optimizer
 
-Streamlit application for planning NGO interventions from budget, volunteer capacity and working-time constraints.
+A Streamlit planning tool for turning a budget, volunteer capacity and working-day availability into a structured NGO programme plan.
 
-## Files
-- `app.py` — Streamlit interface
-- `optimizer_logic.py` — optimisation and scheduling engine
-- `config.json` — editable rates and operating rules
-- `requirements.txt` — deployment dependencies
-- `.streamlit/config.toml` — default theme
+## Included programme scope
 
-## Streamlit Cloud
-Deploy `app.py` as the main file. Keep all files in the same repository root.
+- Project Seva — food/basic-support planning
+- Project Bachpanshala — education and stationery planning
+- Project Jeev — animal-welfare volunteer route
+- Project Udaan — women-empowerment volunteer route
+- Project Prakriti — plantation and clean-up planning
+- Project Vikas — skills/employability volunteer route
 
+The public InAmigos programme catalogue is shown separately from the budget optimizer. Where the available configuration does not establish a reliable cost model, the programme is kept field-configured or volunteer-led rather than assigning an invented price.
 
-UI note: The application is intentionally light-theme only, with green primary actions. Programme calendar and detailed schedule are ordered numerically by day/week.
+## Run
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
