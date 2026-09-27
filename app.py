@@ -99,7 +99,7 @@ def build_content(intervention: str, row: pd.Series, distribution_item: str) -> 
 
 st.set_page_config(
     page_title="InAmigos Resource Allocation Optimizer",
-    page_icon=str(LOGO_PATH),
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🌱",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -173,7 +173,10 @@ distribution_items = cfg["distribution_items"]
 
 header = st.columns([1, 7, 1])
 with header[0]:
-    st.image(str(LOGO_PATH), width=78)
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=78)
+    else:
+        st.markdown('<div class="pill">IAF</div>', unsafe_allow_html=True)
 with header[1]:
     st.markdown('<div class="title">Resource Allocation Optimizer</div>', unsafe_allow_html=True)
     st.markdown(
