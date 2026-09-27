@@ -108,6 +108,13 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    /* InAmigos uses a fixed light interface; hide Streamlit's theme/menu toolbar. */
+    [data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stToolbarActions"],
+    [data-testid="stMainMenu"],
+    #MainMenu,
+    button[aria-label="Main menu"] { display: none !important; }
     .stApp,
     [data-testid="stAppViewContainer"],
     [data-testid="stMainBlockContainer"] {
@@ -141,16 +148,22 @@ st.markdown(
         font-weight: 700;
     }
     .small { opacity: .68; font-size: .82rem; }
-    .stButton > button[kind="primary"] {
+    .stButton > button,
+    [data-testid="stFormSubmitButton"] button,
+    [data-testid="stDownloadButton"] button {
         background: var(--primary-color) !important;
         color: #fff !important;
         border: 1px solid var(--primary-color) !important;
-        border-radius: 9px;
-        font-weight: 720;
+        border-radius: 9px !important;
+        font-weight: 720 !important;
         min-height: 44px;
     }
-    .stButton > button[kind="primary"]:hover {
-        filter: brightness(.94);
+    .stButton > button:hover,
+    [data-testid="stFormSubmitButton"] button:hover,
+    [data-testid="stDownloadButton"] button:hover {
+        background: #008F66 !important;
+        border-color: #008F66 !important;
+        color: #fff !important;
     }
     @media (max-width: 800px) {
         .title { font-size: 1.45rem; }
@@ -345,8 +358,11 @@ with quick_tab:
 
 with coverage_tab:
     st.markdown('<div class="section">Project Coverage</div>', unsafe_allow_html=True)
-    st.markdown('<div class="brand-card">All six named InAmigos projects are represented here. Budgeted interventions use configured rates; projects without verified cost rules are kept field-configured rather than assigned invented prices.</div>', unsafe_allow_html=True)
-    st.dataframe(project_catalog(), use_container_width=True, hide_index=True)
+    st.markdown('<div class="brand-card">The planner covers all six named InAmigos Foundation projects. Budgeted calculations are used only where rates and operating rules are configured; other project activities are shown as field-configurable volunteer routes rather than assigned invented costs.</div>', unsafe_allow_html=True)
+    catalog = project_catalog()
+    st.dataframe(catalog, use_container_width=True, hide_index=True)
+    st.markdown('<div class="section">Volunteer-Led Project Routes</div>', unsafe_allow_html=True)
+    st.dataframe(volunteer_only_options(cfg, int(volunteers), float(hours_per_day)), use_container_width=True, hide_index=True)
 
 with settings_tab:
     st.markdown('<div class="section">Settings</div>', unsafe_allow_html=True)
@@ -364,7 +380,7 @@ with settings_tab:
             ("cleaning_volunteer_hours", "Cleaning volunteer-hours", 1.0),
             ("plantation_volunteer_hours", "Plantation volunteer-hours", 1.0),
             ("plantation_saplings_per_activity", "Saplings per plantation activity", 1.0),
-            ("distribution_duration_hours", "Distribution duration (hours)", 0.5),
+            ("distribution_duration_hours", "Distribution event duration (hours)", 0.5),
             ("distribution_items_per_volunteer_per_hour", "Distribution items / volunteer / hour", 1.0),
             ("learning_session_hours", "Learning session duration (hours)", 0.5),
             ("learning_volunteers_per_team", "Volunteers per learning team", 1.0),

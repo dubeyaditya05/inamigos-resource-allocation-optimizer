@@ -124,7 +124,7 @@ def build_programme_interventions(cfg: dict, volunteers: int, distribution_item:
             "unit_description": "1 school/community cleaning drive",
             "cost_per_unit": float(rates["School Cleaning Materials"]),
             "volunteer_hours_per_unit": float(ops["cleaning_volunteer_hours"]),
-            "elapsed_hours_per_unit": 0.0,
+            "elapsed_hours_per_unit": float(ops["cleaning_volunteer_hours"]) / max(1, int(volunteers)),
             "beneficiaries_per_unit": 0,
             "priority_weight": float(weights.get("School Cleaning Drive", 1.0)),
             "max_per_day": int(ops["max_cleaning_drives_per_day"]),
@@ -141,7 +141,7 @@ def build_programme_interventions(cfg: dict, volunteers: int, distribution_item:
             "unit_description": f"1 plantation activity with {int(ops['plantation_saplings_per_activity'])} saplings",
             "cost_per_unit": float(rates["Sapling"]) * int(ops["plantation_saplings_per_activity"]),
             "volunteer_hours_per_unit": float(ops["plantation_volunteer_hours"]),
-            "elapsed_hours_per_unit": 0.0,
+            "elapsed_hours_per_unit": float(ops["plantation_volunteer_hours"]) / max(1, int(volunteers)),
             "beneficiaries_per_unit": 0,
             "priority_weight": float(weights.get("Plantation Activity", 1.05)),
             "max_per_day": int(ops["max_plantation_activities_per_day"]),
@@ -181,19 +181,6 @@ def build_programme_interventions(cfg: dict, volunteers: int, distribution_item:
             )
 
     return pd.DataFrame(rows)
-
-
-def project_catalog() -> pd.DataFrame:
-    """Return the full InAmigos project coverage without inventing field-cost assumptions."""
-    return pd.DataFrame([
-        {"Project": "Project Seva", "Focus": "Food and basic support", "Planning Mode": "Budgeted"},
-        {"Project": "Project Bachpanshala", "Focus": "Child education", "Planning Mode": "Budgeted"},
-        {"Project": "Project Jeev", "Focus": "Animal welfare", "Planning Mode": "Field-configured / volunteer-led"},
-        {"Project": "Project Udaan", "Focus": "Women empowerment", "Planning Mode": "Field-configured / volunteer-led"},
-        {"Project": "Project Prakriti", "Focus": "Environment", "Planning Mode": "Budgeted + volunteer-led"},
-        {"Project": "Project Vikas", "Focus": "Skills and employability", "Planning Mode": "Volunteer-led / field-configured"},
-    ])
-
 
 
 def _objective_values(df: pd.DataFrame, objective: str) -> np.ndarray:
@@ -357,7 +344,12 @@ def schedule_interventions(
         if remaining > 1e-9:
             return pd.DataFrame(columns=columns)
 
-    return pd.DataFrame(rows, columns=columns)
+    result = pd.DataFrame(rows, columns=columns)
+    if result.empty:
+        return result
+    result["_day_sort"] = result["Day"].str.extract(r"(\d+)")[0].astype(int)
+    result = result.sort_values(["_day_sort", "Intervention", "Units Started"], kind="stable").drop(columns="_day_sort").reset_index(drop=True)
+    return result
 
 
 def optimize_programme(
@@ -482,59 +474,62 @@ def quick_impact(rates: dict, item: str, budget: float) -> tuple[int, float]:
     return units, budget - units * price
 
 
+PROJECT_CATALOG = [
+    {
+        "Project": "Project Seva",
+        "Focus": "Food and clothing support",
+        "Verified activities": "Food distribution; clothing distribution",
+        "Planning basis": "Budgeted distribution model",
+    },
+    {
+        "Project": "Project Bachpanshala",
+        "Focus": "Education and child development",
+        "Verified activities": "Learning sessions; school supplies; workshops/camps; mentorship; awareness",
+        "Planning basis": "Budgeted education-cycle model; other activities volunteer-led until field rules are configured",
+    },
+    {
+        "Project": "Project Jeev",
+        "Focus": "Animal welfare",
+        "Verified activities": "Feeding; rescue/protection; medical care; safe shelter; animal-rights awareness",
+        "Planning basis": "Volunteer-led template; no invented field costs",
+    },
+    {
+        "Project": "Project Udaan",
+        "Focus": "Women empowerment",
+        "Verified activities": "Awareness campaigns; skill-development workshops; entrepreneurial support; SHG collaboration; menstrual-hygiene awareness",
+        "Planning basis": "Volunteer-led template; no invented field costs",
+    },
+    {
+        "Project": "Project Prakriti",
+        "Focus": "Environmental conservation",
+        "Verified activities": "Tree plantation; clean-up campaigns; conservation workshops; water-conservation activities",
+        "Planning basis": "Budgeted plantation/clean-up models; other activities volunteer-led until field rules are configured",
+    },
+    {
+        "Project": "Project Vikas",
+        "Focus": "Employability and skill development",
+        "Verified activities": "Internships; webinars/seminars; resume building; interview preparation; career/skill programmes",
+        "Planning basis": "Volunteer-led template; no invented field costs",
+    },
+]
+
+def project_catalog() -> pd.DataFrame:
+    return pd.DataFrame(PROJECT_CATALOG)
+
+
 def volunteer_only_options(cfg: dict, volunteers: int, hours_per_day: float) -> pd.DataFrame:
     columns = ["Project", "Activity", "Volunteers", "Duration", "Potential Output", "Requirement"]
     if volunteers <= 0 or hours_per_day <= 0:
         return pd.DataFrame(columns=columns)
     ops = cfg["operations"]
-    return pd.DataFrame([
-        {
-            "Project": "Project Bachpanshala",
-            "Activity": "Volunteer-led learning support",
-            "Volunteers": min(volunteers, int(ops["learning_volunteers_per_team"])),
-            "Duration": "Field-defined",
-            "Potential Output": "Learning/reading support",
-            "Requirement": "Existing venue and learning materials",
-        },
-        {
-            "Project": "Project Jeev",
-            "Activity": "Animal welfare support / field assistance",
-            "Volunteers": min(volunteers, 2),
-            "Duration": "Field-defined",
-            "Potential Output": "Field support for verified animal-welfare activities",
-            "Requirement": "Local partner, permission and defined scope",
-        },
-        {
-            "Project": "Project Udaan",
-            "Activity": "Women-focused outreach / support activity",
-            "Volunteers": min(volunteers, 2),
-            "Duration": "Field-defined",
-            "Potential Output": "Community outreach or verified support activity",
-            "Requirement": "Local partner, permission and defined scope",
-        },
-        {
-            "Project": "Project Prakriti",
-            "Activity": "School/community cleanliness support",
-            "Volunteers": volunteers,
-            "Duration": f"{float(ops['cleaning_volunteer_hours']) / volunteers:.2f} hours when volunteers work in parallel",
-            "Potential Output": "1 cleaning activity",
-            "Requirement": "Cleaning materials already available or donated",
-        },
-        {
-            "Project": "Project Vikas",
-            "Activity": "Skills / employability support",
-            "Volunteers": min(volunteers, 2),
-            "Duration": "Field-defined",
-            "Potential Output": "Mentoring or skills-support activity",
-            "Requirement": "Defined curriculum, venue and field requirements",
-        },
-        {
-            "Project": "Project Seva",
-            "Activity": "Community support / needs assessment",
-            "Volunteers": min(volunteers, 2),
-            "Duration": "Field-defined",
-            "Potential Output": "Verified community needs assessment or support coordination",
-            "Requirement": "Local permission and defined scope",
-        },
-    ])
+    v = max(1, int(volunteers))
+    rows = [
+        {"Project": "Project Seva", "Activity": "Food/clothing distribution support", "Volunteers": min(v, 2), "Duration": "Field-defined", "Potential Output": "Distribution support", "Requirement": "Approved supplies and field coordination"},
+        {"Project": "Project Bachpanshala", "Activity": "Volunteer-led learning or mentoring support", "Volunteers": min(v, int(ops["learning_volunteers_per_team"])), "Duration": f"{float(ops['learning_session_hours']):.1f} hours", "Potential Output": "Learning/mentoring support", "Requirement": "Venue, learning materials and child-safeguarding process"},
+        {"Project": "Project Jeev", "Activity": "Animal feeding/welfare support", "Volunteers": min(v, 2), "Duration": "Field-defined", "Potential Output": "Feeding, rescue-support or welfare activity", "Requirement": "Field team, supplies and animal-care protocol"},
+        {"Project": "Project Udaan", "Activity": "Women-focused awareness or skill-support activity", "Volunteers": min(v, 3), "Duration": "Field-defined", "Potential Output": "Awareness/skill-development support", "Requirement": "Defined session scope and local community/SHG coordination"},
+        {"Project": "Project Prakriti", "Activity": "Plantation/clean-up/conservation support", "Volunteers": v, "Duration": f"{float(ops['cleaning_volunteer_hours']) / v:.2f} hours for a cleaning workload", "Potential Output": "Environmental field activity", "Requirement": "Site permission and materials/saplings as applicable"},
+        {"Project": "Project Vikas", "Activity": "Career, internship or employability support", "Volunteers": min(v, 3), "Duration": "Field-defined", "Potential Output": "Mentoring/career-support activity", "Requirement": "Relevant mentor expertise and defined programme scope"},
+    ]
+    return pd.DataFrame(rows, columns=columns)
 
