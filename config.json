@@ -1,0 +1,57 @@
+{
+  "rates": {
+    "Meal for 1 person": 80,
+    "Pencil": 5,
+    "Pen": 10,
+    "Notebook": 65,
+    "Stationery Kit": 100,
+    "School Bag": 400,
+    "Book": 70,
+    "Sapling": 30,
+    "Water Bottle": 20,
+    "Hygiene Kit": 100,
+    "School Cleaning Materials": 250
+  },
+  "operations": {
+    "hours_per_working_day": 5,
+    "working_days_per_week": 5,
+    "weeks_per_month": 4,
+    "learning_session_hours": 5,
+    "learning_volunteers_per_team": 3,
+    "learning_teams_per_session": 3,
+    "learning_children_per_session": 30,
+    "stationery_recipients_per_education_cycle": 30,
+    "cleaning_volunteer_hours": 20,
+    "plantation_volunteer_hours": 10,
+    "plantation_saplings_per_activity": 10,
+    "distribution_duration_hours": 1.5,
+    "distribution_items_per_volunteer_per_hour": 20,
+    "max_education_cycles_per_day": 2,
+    "max_cleaning_drives_per_day": 1,
+    "max_plantation_activities_per_day": 1,
+    "max_distribution_events_per_day": 2,
+    "auto_day_budget_threshold": 2500,
+    "auto_week_budget_threshold": 25000,
+    "auto_month_budget_threshold": 100000,
+    "balanced_max_category_budget_share": 0.55,
+    "balanced_min_categories_for_long_horizon": 3,
+    "balanced_long_horizon_days": 20
+  },
+  "priority_weights": {
+    "Education Cycle": 1.35,
+    "School Cleaning Drive": 1.0,
+    "Plantation Activity": 1.05,
+    "Distribution Event": 1.1
+  },
+  "distribution_items": [
+    "Meal for 1 person",
+    "Pencil",
+    "Pen",
+    "Notebook",
+    "Stationery Kit",
+    "School Bag",
+    "Book",
+    "Water Bottle",
+    "Hygiene Kit"
+  ]
+}
