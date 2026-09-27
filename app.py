@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 
@@ -331,9 +332,34 @@ with planner_tab:
 
         if not schedule.empty:
             st.markdown('<div class="section">Programme Calendar</div>', unsafe_allow_html=True)
+
+            # Keep the optimizer's real schedule untouched, but build a complete
+            # presentation calendar so unused working days remain visible.
             schedule["Day Number"] = schedule["Day"].str.extract(r"(\d+)")[0].astype(int)
-            weekly = schedule.groupby("Week", sort=False).agg(
-                Activities=("Intervention", "nunique"),
+            working_days = int(horizon.days if hasattr(horizon, "days") else plan["horizon"].days)
+            display_rows = []
+            for day_no in range(1, working_days + 1):
+                day_rows = schedule[schedule["Day Number"] == day_no]
+                if day_rows.empty:
+                    display_rows.append({
+                        "Day": f"Day {day_no}",
+                        "Week": f"Week {(day_no - 1) // int(ops['working_days_per_week']) + 1}",
+                        "Intervention": "No activity planned",
+                        "Units Started": 0,
+                        "Volunteer Hours": 0.0,
+                        "Elapsed Hours": 0.0,
+                        "Allocated Budget": 0.0,
+                        "Planned Capacity": 0.0,
+                        "Day Number": day_no,
+                    })
+                else:
+                    display_rows.extend(day_rows.to_dict("records"))
+            calendar_schedule = pd.DataFrame(display_rows)
+
+            # Build the weekly summary from the complete calendar, including
+            # weeks with no scheduled activity.
+            weekly = calendar_schedule.groupby("Week", sort=False).agg(
+                Activities=("Intervention", lambda values: int(sum(v != "No activity planned" for v in values))),
                 Units=("Units Started", "sum"),
                 Budget=("Allocated Budget", "sum"),
                 VolunteerHours=("Volunteer Hours", "sum"),
@@ -342,17 +368,23 @@ with planner_tab:
             weekly["_week_sort"] = weekly["Week"].str.extract(r"(\d+)")[0].astype(int)
             weekly = weekly.sort_values("_week_sort", kind="stable").drop(columns="_week_sort").reset_index(drop=True)
             st.dataframe(weekly, use_container_width=True, hide_index=True, column_config={"Budget": st.column_config.NumberColumn(format="₹%,.0f"), "VolunteerHours": st.column_config.NumberColumn(format="%.2f"), "PlannedCapacity": st.column_config.NumberColumn(format="%.0f")})
+
             with st.expander("View detailed schedule"):
-                detail = schedule.drop(columns="Day Number")
+                detail = calendar_schedule.drop(columns="Day Number")
                 st.dataframe(detail, use_container_width=True, hide_index=True, column_config={"Allocated Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.2f"), "Elapsed Hours": st.column_config.NumberColumn(format="%.2f"), "Planned Capacity": st.column_config.NumberColumn(format="%.0f")})
 
             weeks = []
-            for week_name, group in schedule.groupby("Week", sort=False):
-                names = ", ".join(dict.fromkeys(group["Intervention"].tolist()))
-                week_no = int(re.search(r"(\d+)$", str(week_name)).group(1))
-                focus = "Programme launch and field setup" if week_no == 1 else ("Progress review and impact update" if week_no % 4 == 0 else "Delivery and field documentation")
+            total_weeks = math.ceil(working_days / int(ops["working_days_per_week"]))
+            for week_no in range(1, total_weeks + 1):
+                week_name = f"Week {week_no}"
+                group = calendar_schedule[calendar_schedule["Week"] == week_name]
+                names = ", ".join(dict.fromkeys(group.loc[group["Intervention"] != "No activity planned", "Intervention"].tolist()))
+                if not names:
+                    names = "No activity planned"
+                    focus = "No delivery scheduled; use the day for preparation, coordination or follow-up"
+                else:
+                    focus = "Programme launch and field setup" if week_no == 1 else ("Progress review and impact update" if week_no % 4 == 0 else "Delivery and field documentation")
                 weeks.append({"Period": week_name, "Programme focus": names, "Communication focus": focus})
-            weeks = sorted(weeks, key=lambda row: int(re.search(r"(\d+)$", str(row["Period"])).group(1)))
             st.markdown('<div class="section">Communication Timeline</div>', unsafe_allow_html=True)
             st.dataframe(pd.DataFrame(weeks), use_container_width=True, hide_index=True)
 
