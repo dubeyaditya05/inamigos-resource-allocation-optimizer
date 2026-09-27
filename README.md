@@ -21,7 +21,9 @@ Upload the contents of this folder to the GitHub repository root and deploy `app
 - Direct-support alternatives
 - CSV and settings export
 
-## Final UI controls
-- Fixed light-only interface; Streamlit theme/menu toolbar is hidden in the app UI.
-- InAmigos green action buttons are applied to primary, form-submit and download controls.
-- Project Coverage lists all six projects and verified activity areas; activities without grounded cost rules remain volunteer-led/configurable rather than receiving invented costs.
+## Release QA
+- Fixed light-only interface; application surfaces do not depend on the viewer's dark-mode preference.
+- Action buttons use a light green InAmigos treatment.
+- Programme Calendar and Communication Timeline sort Week numbers numerically.
+- Detailed schedule remains numerically ordered by Day.
+- Release candidate was checked with deterministic planning cases, randomized regression cases, UI execution harness cases, source guards, and package-content checks.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -108,29 +109,59 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* InAmigos uses a fixed light interface; hide Streamlit's theme/menu toolbar. */
+    /* Fixed light-only interface. Do not depend on Streamlit theme variables. */
+    html, body { color-scheme: light !important; }
+    html, body, .stApp,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"],
+    [data-testid="stMainBlockContainer"] > div {
+        background: #F5F8F7 !important;
+        color: #17212B !important;
+    }
     [data-testid="stHeader"],
     [data-testid="stToolbar"],
     [data-testid="stToolbarActions"],
     [data-testid="stMainMenu"],
     #MainMenu,
     button[aria-label="Main menu"] { display: none !important; }
-    .stApp,
-    [data-testid="stAppViewContainer"],
-    [data-testid="stMainBlockContainer"] {
-        background: var(--background-color) !important;
-        color: var(--text-color) !important;
-    }
     [data-testid="stHeader"] {
-        background: var(--background-color) !important;
-        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
+        background: #F5F8F7 !important;
+        border-bottom: 1px solid #DCE7E2 !important;
     }
-    [data-testid="stSidebar"] {
-        background: var(--secondary-background-color) !important;
+    [data-testid="stSidebar"],
+    [data-testid="stExpander"],
+    [data-testid="stDataFrame"],
+    [data-testid="stTable"] {
+        background: #FFFFFF !important;
+        color: #17212B !important;
+    }
+    [data-testid="stMarkdownContainer"],
+    [data-testid="stText"],
+    label, p, h1, h2, h3, h4, h5, h6 {
+        color: #17212B;
+    }
+    input, textarea,
+    [data-baseweb="input"] > div,
+    [data-baseweb="select"] > div,
+    [data-baseweb="select"] [role="combobox"],
+    [data-baseweb="menu"],
+    [role="listbox"],
+    [role="option"] {
+        background: #FFFFFF !important;
+        color: #17212B !important;
+        border-color: #CFE0D9 !important;
+    }
+    [data-baseweb="tab-list"] {
+        background: #FFFFFF !important;
+        border-bottom: 1px solid #DCE7E2 !important;
+    }
+    [data-baseweb="tab"] {
+        color: #17212B !important;
     }
     .brand-card {
-        background: var(--secondary-background-color);
-        border: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
+        background: #FFFFFF;
+        border: 1px solid #DCE7E2;
         border-radius: 14px;
         padding: 16px 18px;
     }
@@ -141,9 +172,9 @@ st.markdown(
         display: inline-block;
         padding: 6px 11px;
         border-radius: 999px;
-        color: var(--primary-color) !important;
-        border: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent);
-        background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+        color: #087A57 !important;
+        border: 1px solid #B8E6D2;
+        background: #EAF8F1;
         font-size: .78rem;
         font-weight: 700;
     }
@@ -151,9 +182,9 @@ st.markdown(
     .stButton > button,
     [data-testid="stFormSubmitButton"] button,
     [data-testid="stDownloadButton"] button {
-        background: var(--primary-color) !important;
-        color: #fff !important;
-        border: 1px solid var(--primary-color) !important;
+        background: #DDF4E9 !important;
+        color: #087A57 !important;
+        border: 1px solid #B8E6D2 !important;
         border-radius: 9px !important;
         font-weight: 720 !important;
         min-height: 44px;
@@ -161,9 +192,9 @@ st.markdown(
     .stButton > button:hover,
     [data-testid="stFormSubmitButton"] button:hover,
     [data-testid="stDownloadButton"] button:hover {
-        background: #008F66 !important;
-        border-color: #008F66 !important;
-        color: #fff !important;
+        background: #C7EEDC !important;
+        border-color: #A8DFC7 !important;
+        color: #066A4A !important;
     }
     @media (max-width: 800px) {
         .title { font-size: 1.45rem; }
@@ -301,24 +332,27 @@ with planner_tab:
         if not schedule.empty:
             st.markdown('<div class="section">Programme Calendar</div>', unsafe_allow_html=True)
             schedule["Day Number"] = schedule["Day"].str.extract(r"(\d+)")[0].astype(int)
-            weekly = schedule.groupby("Week", sort=True).agg(
+            weekly = schedule.groupby("Week", sort=False).agg(
                 Activities=("Intervention", "nunique"),
                 Units=("Units Started", "sum"),
                 Budget=("Allocated Budget", "sum"),
                 VolunteerHours=("Volunteer Hours", "sum"),
                 PlannedCapacity=("Planned Capacity", "sum"),
             ).reset_index()
+            weekly["_week_sort"] = weekly["Week"].str.extract(r"(\d+)")[0].astype(int)
+            weekly = weekly.sort_values("_week_sort", kind="stable").drop(columns="_week_sort").reset_index(drop=True)
             st.dataframe(weekly, use_container_width=True, hide_index=True, column_config={"Budget": st.column_config.NumberColumn(format="₹%,.0f"), "VolunteerHours": st.column_config.NumberColumn(format="%.2f"), "PlannedCapacity": st.column_config.NumberColumn(format="%.0f")})
             with st.expander("View detailed schedule"):
                 detail = schedule.drop(columns="Day Number")
                 st.dataframe(detail, use_container_width=True, hide_index=True, column_config={"Allocated Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.2f"), "Elapsed Hours": st.column_config.NumberColumn(format="%.2f"), "Planned Capacity": st.column_config.NumberColumn(format="%.0f")})
 
             weeks = []
-            for week_name, group in schedule.groupby("Week", sort=True):
+            for week_name, group in schedule.groupby("Week", sort=False):
                 names = ", ".join(dict.fromkeys(group["Intervention"].tolist()))
-                week_no = int(str(week_name).split()[-1])
+                week_no = int(re.search(r"(\d+)$", str(week_name)).group(1))
                 focus = "Programme launch and field setup" if week_no == 1 else ("Progress review and impact update" if week_no % 4 == 0 else "Delivery and field documentation")
                 weeks.append({"Period": week_name, "Programme focus": names, "Communication focus": focus})
+            weeks = sorted(weeks, key=lambda row: int(re.search(r"(\d+)$", str(row["Period"])).group(1)))
             st.markdown('<div class="section">Communication Timeline</div>', unsafe_allow_html=True)
             st.dataframe(pd.DataFrame(weeks), use_container_width=True, hide_index=True)
 
