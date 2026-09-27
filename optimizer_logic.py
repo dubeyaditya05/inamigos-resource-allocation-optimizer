@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from itertools import product, combinations
 import numpy as np
 import pandas as pd
 from scipy.optimize import Bounds, LinearConstraint, milp
@@ -213,13 +214,13 @@ def _max_units_for_horizon(row: pd.Series, days: int, ops: dict, volunteers: int
     return max(0, cap)
 
 
-def _category_caps(df: pd.DataFrame, budget: float, objective: str, ops: dict):
+def _category_caps(df: pd.DataFrame, budget: float, objective: str, ops: dict, variable_count: int):
     rows, lbs, ubs = [], [], []
     if objective != "Balanced programme":
         return rows, lbs, ubs
     share = float(ops["balanced_max_category_budget_share"])
     for category in df["category"].drop_duplicates():
-        row = np.zeros(len(df) * 2)
+        row = np.zeros(variable_count)
         for i, cat in enumerate(df["category"]):
             if cat == category:
                 row[i] = float(df.loc[i, "cost_per_unit"])
@@ -228,6 +229,69 @@ def _category_caps(df: pd.DataFrame, budget: float, objective: str, ops: dict):
         lbs.append(-np.inf)
         ubs.append(max(highest, budget * share))
     return rows, lbs, ubs
+
+
+def _balanced_category_target(
+    df: pd.DataFrame,
+    budget: float,
+    volunteers: int,
+    hours_per_day: float,
+    horizon_days_count: int,
+    ops: dict,
+    max_units: np.ndarray,
+) -> int:
+    """Return the largest category count that is actually feasible for one unit per category."""
+    categories = list(df["category"].drop_duplicates())
+    desired = min(int(ops["balanced_min_categories_for_long_horizon"]), len(categories))
+    if desired <= 1:
+        return desired
+
+    candidates_by_category: dict[str, list[int]] = {}
+    for category in categories:
+        candidates = []
+        for i, row in df.iterrows():
+            if row["category"] != category or int(max_units[i]) < 1:
+                continue
+            if float(row["cost_per_unit"]) > budget + 1e-9:
+                continue
+            if float(row["volunteer_hours_per_unit"]) > volunteers * hours_per_day * horizon_days_count + 1e-9:
+                continue
+            if (not bool(row["split_allowed"])) and float(row["elapsed_hours_per_unit"]) > hours_per_day + 1e-9:
+                continue
+            candidates.append(i)
+        if candidates:
+            candidates_by_category[category] = candidates
+
+    feasible_categories = list(candidates_by_category)
+    if not feasible_categories:
+        return 0
+
+    max_target = min(desired, len(feasible_categories))
+    total_capacity = volunteers * hours_per_day * horizon_days_count
+    # Check from the largest target down. Each category only needs one complete unit.
+    for target in range(max_target, 1, -1):
+        for category_combo in combinations(feasible_categories, target):
+            option_lists = [candidates_by_category[c] for c in category_combo]
+            for index_combo in product(*option_lists):
+                if sum(float(df.loc[i, "cost_per_unit"]) for i in index_combo) > budget + 1e-9:
+                    continue
+                if sum(float(df.loc[i, "volunteer_hours_per_unit"]) for i in index_combo) > total_capacity + 1e-9:
+                    continue
+                test = df.loc[list(index_combo)].copy()
+                test["units"] = 1
+                test["allocated_budget"] = test["cost_per_unit"]
+                test["volunteer_hours"] = test["volunteer_hours_per_unit"]
+                test["planned_beneficiaries"] = test["beneficiaries_per_unit"]
+                scheduled = schedule_interventions(
+                    test, volunteers, hours_per_day,
+                    PlanningHorizon("", horizon_days_count), ops,
+                )
+                if not scheduled.empty:
+                    placed = scheduled.groupby("Intervention")["Units Started"].sum().to_dict()
+                    required = {name: 1 for name in test["intervention"]}
+                    if placed == required:
+                        return target
+    return 1 if feasible_categories else 0
 
 
 def schedule_interventions(
@@ -377,49 +441,50 @@ def optimize_programme(
     if max_units.sum() == 0:
         return None, "No complete intervention fits the current volunteer capacity and planning horizon."
 
-    # x_i = complete intervention units; y_i = whether the intervention is selected.
-    c = np.r_[-values, np.full(n, -5.0 if objective == "Balanced programme" else 0.0)]
+    # x_i = complete intervention units; y_i = whether intervention i is selected.
+    # z_c = whether category c is represented in a balanced long-horizon plan.
+    categories = list(df["category"].drop_duplicates())
+    category_index = {category: j for j, category in enumerate(categories)}
+    category_target = 0
+    if objective == "Balanced programme" and horizon_days_count >= int(ops["balanced_long_horizon_days"]):
+        category_target = _balanced_category_target(
+            df, budget, volunteers, hours_per_day, horizon_days_count, ops, max_units
+        )
+    extra_z = len(categories) if category_target > 1 else 0
+    variable_count = 2 * n + extra_z
+
+    c = np.r_[-values, np.full(n, -5.0 if objective == "Balanced programme" else 0.0), np.zeros(extra_z)]
     rows, lower, upper = [], [], []
 
-    cost = np.zeros(2 * n); cost[:n] = df["cost_per_unit"].to_numpy(float)
-    hours = np.zeros(2 * n); hours[:n] = df["volunteer_hours_per_unit"].to_numpy(float)
+    cost = np.zeros(variable_count); cost[:n] = df["cost_per_unit"].to_numpy(float)
+    hours = np.zeros(variable_count); hours[:n] = df["volunteer_hours_per_unit"].to_numpy(float)
     rows += [cost, hours]; lower += [-np.inf, -np.inf]; upper += [budget, volunteers * hours_per_day * horizon_days_count]
 
     for i, _ in df.iterrows():
-        link = np.zeros(2 * n); link[i] = 1; link[n + i] = -max_units[i]
-        active = np.zeros(2 * n); active[i] = 1; active[n + i] = -1
+        link = np.zeros(variable_count); link[i] = 1; link[n + i] = -max_units[i]
+        active = np.zeros(variable_count); active[i] = 1; active[n + i] = -1
         rows += [link, active]; lower += [-np.inf, 0]; upper += [0, np.inf]
 
-    cat_rows, cat_lbs, cat_ubs = _category_caps(df, budget, objective, ops)
+    cat_rows, cat_lbs, cat_ubs = _category_caps(df, budget, objective, ops, variable_count)
     rows += cat_rows; lower += cat_lbs; upper += cat_ubs
 
-    # Long balanced plans should contain multiple categories when feasible.
-    if objective == "Balanced programme" and horizon_days_count >= int(ops["balanced_long_horizon_days"]):
-        categories = list(df["category"].drop_duplicates())
-        feasible_categories = []
-        daily_capacity = volunteers * hours_per_day
-        for category in categories:
-            candidates = df[df["category"] == category]
-            if any(
-                float(r.cost_per_unit) <= budget
-                and int(r.min_volunteers) <= volunteers
-                and (bool(r.split_allowed) or float(r.elapsed_hours_per_unit) <= hours_per_day)
-                for _, r in candidates.iterrows()
-            ):
-                feasible_categories.append(category)
-        target = min(int(ops["balanced_min_categories_for_long_horizon"]), len(feasible_categories))
-        if target > 1:
-            activation = np.zeros((len(feasible_categories), 2 * n))
-            for j, category in enumerate(feasible_categories):
-                for i, cat in enumerate(df["category"]):
-                    if cat == category:
-                        activation[j, n + i] = 1
-            rows.append(activation.sum(axis=0)); lower.append(target); upper.append(np.inf)
+    if extra_z:
+        z_offset = 2 * n
+        # Any active intervention in a category activates its category indicator.
+        for i, category in enumerate(df["category"]):
+            link_z = np.zeros(variable_count)
+            link_z[n + i] = 1
+            link_z[z_offset + category_index[category]] = -1
+            rows.append(link_z); lower.append(-np.inf); upper.append(0)
+        # Maximize the number of distinct categories up to the feasible target.
+        distinct = np.zeros(variable_count)
+        distinct[z_offset:z_offset + len(categories)] = 1
+        rows.append(distinct); lower.append(category_target); upper.append(np.inf)
 
     result = milp(
         c=c,
-        integrality=np.ones(2 * n),
-        bounds=Bounds(np.zeros(2 * n), np.r_[max_units.astype(float), np.ones(n)]),
+        integrality=np.ones(variable_count),
+        bounds=Bounds(np.zeros(variable_count), np.r_[max_units.astype(float), np.ones(n), np.ones(extra_z)]),
         constraints=LinearConstraint(np.vstack(rows), np.array(lower), np.array(upper)),
         options={"time_limit": 8},
     )
@@ -449,12 +514,18 @@ def optimize_programme(
             return out, None
 
         candidates = []
+        current_categories = set(out.loc[out["units"] > 0, "category"].tolist())
+        preserve_categories = (
+            objective == "Balanced programme"
+            and horizon_days_count >= int(ops["balanced_long_horizon_days"])
+            and category_target > 1
+            and len(current_categories) <= category_target
+        )
         for i in out.index[out["units"] > 0]:
-            name = out.loc[i, "intervention"]
             category = out.loc[i, "category"]
-            if objective == "Balanced programme" and horizon_days_count >= int(ops["balanced_long_horizon_days"]):
-                if int((out["category"] == category).sum()) > 1 and int(out.loc[i, "units"]) == 1:
-                    continue
+            category_count = int(((out["units"] > 0) & (out["category"] == category)).sum())
+            if preserve_categories and category_count <= 1:
+                continue
             candidates.append((float(values[i]), i))
         if not candidates:
             return None, "The selected plan cannot be scheduled within the configured cadence and working-day limits."

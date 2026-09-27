@@ -388,7 +388,8 @@ with planner_tab:
             st.markdown('<div class="section">Communication Timeline</div>', unsafe_allow_html=True)
             st.dataframe(pd.DataFrame(weeks), use_container_width=True, hide_index=True)
 
-        st.markdown('<div class="section">Programme Communication</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section">Social Media Hooks & Programme Communication</div>', unsafe_allow_html=True)
+        st.markdown('<div class="brand-card"><b>Turn the generated programme into communication content</b><br><span class="small">Choose an intervention to get multiple social-media hooks, a scenario-based caption and a professional / CSR update using the actual allocation results.</span></div>', unsafe_allow_html=True)
         selected = st.selectbox("Select an intervention", active["intervention"].tolist(), key="content_intervention")
         row = active[active["intervention"] == selected].iloc[0]
         hooks, body, professional = build_content(selected, row, plan["distribution_item"])
