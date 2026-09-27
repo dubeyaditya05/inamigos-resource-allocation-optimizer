@@ -27,36 +27,80 @@ def money(value: float) -> str:
     return f"₹{value:,.0f}"
 
 
-def load_config() -> dict:
-    cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+def load_config(path: Path = CONFIG_PATH) -> dict:
+    cfg = json.loads(path.read_text(encoding="utf-8"))
     validate_config(cfg)
     return cfg
 
 
-def communication_copy(intervention: str, row: pd.Series, distribution_item: str) -> tuple[list[str], str, str]:
+def build_content(intervention: str, row: pd.Series, distribution_item: str) -> tuple[list[str], str, str]:
     units = int(row["units"])
-    budget = float(row["allocated_budget"])
     capacity = int(row["planned_beneficiaries"])
-    hooks = {
-        "Seva Meal Distribution": ["A planned meal distribution can turn a defined budget into direct community support.", "Food support works best when delivery is planned around real field capacity."],
-        "Bachpanshala Learning Cycle": ["30 children. One structured learning cycle. A clear plan for delivery.", "Education support becomes stronger when learning and essential study material move together."],
-        "Prakriti Plantation Activity": ["A planned plantation activity turns volunteer capacity into a measurable environmental action.", "Planting is only the first step; planning the activity makes the work deliverable."],
-        "Prakriti School/Community Clean-up": ["A focused clean-up can turn volunteer hours into a visible community improvement.", "Small, scheduled field actions can create practical local impact."],
-    }
-    hook_list = hooks.get(intervention, [f"A structured {intervention.lower()} plan built around available resources."])
-    body = (
-        f"The current scenario includes {units} complete {intervention} unit(s), "
-        f"with {money(budget)} allocated."
-    )
-    if capacity:
-        body += f" Planned direct capacity is {capacity:,} {distribution_item.lower() if intervention == 'Seva Meal Distribution' else 'learner places'}."
-    professional = f"Programme planning update: {units} complete unit(s) of {intervention} are included, with {money(budget)} allocated under the current resource scenario."
-    return hook_list, body, professional
+    budget = float(row["allocated_budget"])
+    if intervention == "Education Cycle":
+        hooks = [
+            f"What can a planned {money(budget)} education programme make possible?",
+            "One classroom. One structured programme. A measurable learning journey.",
+            f"A focused education plan for {capacity} learner places.",
+        ]
+        body = (
+            f"The current programme plan includes {units} complete Education Cycle unit(s), "
+            f"covering {capacity:,} learner places with matching stationery support for the same cohort. "
+            "The programme can be documented through attendance, learning assessments and activity records."
+        )
+        professional = (
+            f"Education planning update: {units} complete cycle(s) are scheduled in the current scenario, "
+            f"with an allocated budget of {money(budget)} and planned capacity of {capacity:,} learner places. "
+            "Programme costs, permissions and final implementation details should be confirmed before execution."
+        )
+    elif intervention == "Distribution Event":
+        hooks = [
+            f"What can a planned {money(budget)} community distribution programme deliver?",
+            f"A clear distribution plan can turn volunteer time into {capacity:,} item-level support opportunities.",
+            f"{capacity:,} planned {distribution_item} units in the current scenario.",
+        ]
+        body = (
+            f"The current programme plan includes {units} distribution event(s) for {distribution_item}, "
+            f"with {capacity:,} planned item units. The schedule uses the available volunteer capacity and configured distribution rate."
+        )
+        professional = (
+            f"Community distribution planning update: {units} event(s) are included in the scenario, "
+            f"representing {capacity:,} planned {distribution_item} units and an allocated budget of {money(budget)}."
+        )
+    elif intervention == "School Cleaning Drive":
+        hooks = [
+            "One school. One team. One focused clean-up effort.",
+            "A small operational intervention can create a visible community improvement.",
+            "From volunteer hours to a completed community activity.",
+        ]
+        body = (
+            f"The current programme plan includes {units} cleaning drive(s) with {money(budget)} allocated for materials. "
+            "Volunteer effort is scheduled around available capacity and working hours."
+        )
+        professional = (
+            f"Community activity planning update: {units} cleaning drive(s) are included with {money(budget)} allocated "
+            "for the configured material requirement and volunteer time scheduled around available capacity."
+        )
+    else:
+        hooks = [
+            f"{units * 10:,} saplings. A planned environmental action built around volunteer capacity.",
+            "Planting is only the beginning; a good plan also schedules the work and follow-up.",
+            "Turning volunteer capacity into a structured plantation programme.",
+        ]
+        body = (
+            f"The current plan includes {units} plantation activity unit(s), representing {capacity or units * 10:,} saplings "
+            f"under the configured activity size, with {money(budget)} allocated for saplings."
+        )
+        professional = (
+            f"Environment planning update: {units} plantation activity unit(s) are included in the current scenario, "
+            f"with {money(budget)} allocated for saplings and volunteer work scheduled across the selected planning horizon."
+        )
+    return hooks, body, professional
 
 
 st.set_page_config(
     page_title="InAmigos Resource Allocation Optimizer",
-    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "I",
+    page_icon=str(LOGO_PATH),
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -64,25 +108,55 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    :root { --iaf-green:#00A878; --iaf-dark:#17332B; --iaf-muted:#667085; --iaf-border:#DCE6E2; }
-    [data-testid="stToolbar"] { display:none !important; }
-    [data-testid="stHeader"] { background:#FFFFFF !important; }
-    .stApp { background:#FFFFFF !important; }
-    [data-testid="stMainBlockContainer"] { max-width:1180px; padding-top:1.2rem; }
-    .hero { border:1px solid var(--iaf-border); border-radius:18px; padding:20px 22px; background:#F7FAF9; }
-    .hero-title { color:var(--iaf-dark); font-size:2rem; font-weight:800; line-height:1.1; }
-    .hero-sub { color:var(--iaf-muted); margin-top:6px; }
-    .section { color:var(--iaf-dark); font-size:1.18rem; font-weight:800; margin:24px 0 10px; }
-    .info-card { border:1px solid var(--iaf-border); border-radius:14px; padding:15px 17px; background:#FFFFFF; height:100%; }
-    .project-card { border:1px solid var(--iaf-border); border-radius:14px; padding:13px 15px; background:#FFFFFF; min-height:120px; }
-    .project-name { color:var(--iaf-dark); font-weight:800; }
-    .muted { color:var(--iaf-muted); font-size:.86rem; }
-    .badge { display:inline-block; padding:4px 9px; border-radius:999px; background:#E7F7F1; color:#087653; font-size:.74rem; font-weight:700; }
-    .stButton > button[kind="primary"], .stFormSubmitButton > button { background:#00A878 !important; color:white !important; border:1px solid #00A878 !important; font-weight:750 !important; border-radius:9px !important; min-height:44px; }
-    .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button:hover { background:#008F68 !important; border-color:#008F68 !important; }
-    div[data-baseweb="tab-list"] button[aria-selected="true"] { color:#00A878 !important; }
-    div[data-baseweb="tab-highlight"] { background:#00A878 !important; }
-    @media(max-width:800px){ .hero-title{font-size:1.45rem;} [data-testid="stMainBlockContainer"]{padding-left:.7rem;padding-right:.7rem;} }
+    .stApp,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMainBlockContainer"] {
+        background: var(--background-color) !important;
+        color: var(--text-color) !important;
+    }
+    [data-testid="stHeader"] {
+        background: var(--background-color) !important;
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
+    }
+    [data-testid="stSidebar"] {
+        background: var(--secondary-background-color) !important;
+    }
+    .brand-card {
+        background: var(--secondary-background-color);
+        border: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
+        border-radius: 14px;
+        padding: 16px 18px;
+    }
+    .title { font-size: 2rem; font-weight: 750; line-height: 1.1; }
+    .subtitle { opacity: .72; margin-top: 5px; }
+    .section { font-size: 1.18rem; font-weight: 720; margin: 18px 0 9px; }
+    .pill {
+        display: inline-block;
+        padding: 6px 11px;
+        border-radius: 999px;
+        color: var(--primary-color) !important;
+        border: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent);
+        background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+        font-size: .78rem;
+        font-weight: 700;
+    }
+    .small { opacity: .68; font-size: .82rem; }
+    .stButton > button[kind="primary"] {
+        background: var(--primary-color) !important;
+        color: #fff !important;
+        border: 1px solid var(--primary-color) !important;
+        border-radius: 9px;
+        font-weight: 720;
+        min-height: 44px;
+    }
+    .stButton > button[kind="primary"]:hover {
+        filter: brightness(.94);
+    }
+    @media (max-width: 800px) {
+        .title { font-size: 1.45rem; }
+        .subtitle { font-size: .88rem; }
+        .section { font-size: 1.05rem; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -94,163 +168,245 @@ if "plan" not in st.session_state:
     st.session_state.plan = None
 
 cfg = st.session_state.cfg
-rates, ops = cfg["rates"], cfg["operations"]
+rates = cfg["rates"]
+ops = cfg["operations"]
 distribution_items = cfg["distribution_items"]
 
-hero = st.columns([1, 8])
-with hero[0]:
-    if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), width=82)
-with hero[1]:
-    st.markdown('<div class="hero"><div class="hero-title">Resource Allocation Optimizer</div><div class="hero-sub">Plan practical NGO programmes using budget, volunteer capacity, working hours and delivery rules.</div></div>', unsafe_allow_html=True)
+header = st.columns([1, 7, 1])
+with header[0]:
+    st.image(str(LOGO_PATH), width=78)
+with header[1]:
+    st.markdown('<div class="title">Resource Allocation Optimizer</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="subtitle">Plan meaningful interventions using budget, volunteer capacity and operational rules.</div>',
+        unsafe_allow_html=True,
+    )
+with header[2]:
+    st.markdown('<div class="pill">InAmigos</div>', unsafe_allow_html=True)
 
 planner_tab, quick_tab, coverage_tab, settings_tab = st.tabs(["Programme Planning", "Quick Impact", "Project Coverage", "Settings"])
 
 with planner_tab:
     st.markdown('<div class="section">Planning Inputs</div>', unsafe_allow_html=True)
-    c = st.columns(5)
-    with c[0]: budget = st.number_input("Available Budget (₹)", min_value=0.0, value=500000.0, step=5000.0, key="budget")
-    with c[1]: volunteers = st.number_input("Available Volunteers", min_value=0, value=10, step=1, key="volunteers")
-    with c[2]: hours = st.number_input("Working Hours / Day", min_value=0.5, value=float(ops["hours_per_working_day"]), step=0.5, key="hours")
-    with c[3]: horizon_label = st.selectbox("Planning Horizon", ["Auto", "1 Day", "1 Week", "1 Month", "3 Months"], key="horizon")
-    with c[4]: objective = st.selectbox("Planning Objective", OBJECTIVES, index=0, key="objective")
+    input_cols = st.columns(5)
+    with input_cols[0]:
+        budget = st.number_input("Available Budget (₹)", min_value=0.0, value=500000.0, step=5000.0, key="budget")
+    with input_cols[1]:
+        volunteers = st.number_input("Available Volunteers", min_value=0, value=10, step=1, key="volunteers")
+    with input_cols[2]:
+        hours_per_day = st.number_input("Working Hours / Day", min_value=0.5, value=float(ops["hours_per_working_day"]), step=0.5, key="hours_per_day")
+    with input_cols[3]:
+        horizon_label = st.selectbox("Planning Horizon", ["Auto", "1 Day", "1 Week", "1 Month", "3 Months"], key="horizon")
+    with input_cols[4]:
+        objective = st.selectbox("Planning Objective", OBJECTIVES, index=1, key="objective")
 
-    c2 = st.columns([1, 1, 2])
-    with c2[0]: distribution_item = st.selectbox("Seva Distribution Item", distribution_items, index=0, key="distribution_item")
-    with c2[1]:
-        st.markdown(f'<div class="info-card"><b>Delivery model</b><br><span class="muted">Education: {ops["learning_children_per_session"]} children • {ops["learning_volunteers_per_team"]} volunteers • {ops["learning_session_hours"]:.0f} hours<br>Distribution: {ops["distribution_items_per_volunteer_per_hour"]:.0f} items / volunteer / hour</span></div>', unsafe_allow_html=True)
-    with c2[2]:
-        st.markdown('<div class="info-card"><b>Planning scope</b><br><span class="muted">Budgeted routes cover Seva, Bachpanshala and Prakriti. Jeev, Udaan and Vikas remain visible as field-configured / volunteer-led programmes rather than being assigned invented costs.</span></div>', unsafe_allow_html=True)
+    input2 = st.columns(2)
+    with input2[0]:
+        distribution_item = st.selectbox("Distribution Item", distribution_items, index=min(distribution_items.index("Stationery Kit"), len(distribution_items)-1), key="distribution_item")
+    with input2[1]:
+        st.markdown(
+            f'<div class="brand-card"><b>Current delivery model</b><br><span class="small">Education: 30 children + matching stationery • Distribution: {ops["distribution_items_per_volunteer_per_hour"]:.0f} items/volunteer/hour • Working day: {hours_per_day:.1f} hours</span></div>',
+            unsafe_allow_html=True,
+        )
 
     horizon = horizon_days(horizon_label, ops, float(budget))
-    st.caption(f"Selected horizon: {horizon.label} • {horizon.days} planning days")
-
-    st.markdown('<div class="section">Budgeted Intervention Portfolio</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section">Intervention Portfolio</div>', unsafe_allow_html=True)
     interventions = build_programme_interventions(cfg, int(volunteers), distribution_item)
     portfolio = interventions[["project", "intervention", "category", "cost_per_unit", "volunteer_hours_per_unit", "beneficiaries_per_unit", "max_per_week", "min_gap_days"]].copy()
     portfolio.columns = ["Project", "Intervention", "Category", "Cost / Unit", "Volunteer Hours / Unit", "Capacity / Unit", "Max / Week", "Min Gap (Days)"]
-    st.dataframe(portfolio, use_container_width=True, hide_index=True, column_config={"Cost / Unit":st.column_config.NumberColumn(format="₹%,.0f"),"Volunteer Hours / Unit":st.column_config.NumberColumn(format="%.2f"),"Capacity / Unit":st.column_config.NumberColumn(format="%.0f")})
+    st.dataframe(
+        portfolio,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Cost / Unit": st.column_config.NumberColumn(format="₹%,.0f"),
+            "Volunteer Hours / Unit": st.column_config.NumberColumn(format="%.2f"),
+            "Capacity / Unit": st.column_config.NumberColumn(format="%.0f"),
+        },
+    )
+    with st.expander("View intervention definitions"):
+        for _, row in interventions.iterrows():
+            st.write(f"**{row['intervention']}** — {row['unit_description']}")
 
     if st.button("Run Allocation", type="primary", use_container_width=True):
-        result = {"budget":float(budget),"volunteers":int(volunteers),"hours":float(hours),"horizon":horizon,"objective":objective,"distribution_item":distribution_item,"allocation":None,"schedule":pd.DataFrame(),"error":None}
+        result = {"budget": float(budget), "volunteers": int(volunteers), "hours_per_day": float(hours_per_day), "horizon": horizon, "objective": objective, "distribution_item": distribution_item, "allocation": None, "schedule": pd.DataFrame(), "error": None}
         if budget == 0:
-            result["schedule"] = volunteer_only_options(cfg, int(volunteers), float(hours))
+            result["schedule"] = volunteer_only_options(cfg, int(volunteers), float(hours_per_day))
         elif volunteers <= 0:
-            result["error"] = "Add at least one volunteer for programme delivery."
+            result["error"] = "No volunteer capacity is available for programme delivery. Use Quick Impact for direct-support quantities or add volunteers."
         else:
-            allocation, error = optimize_programme(interventions, float(budget), int(volunteers), float(hours), horizon.days, objective, ops)
+            allocation, error = optimize_programme(interventions, float(budget), int(volunteers), float(hours_per_day), horizon.days, objective, ops)
+            if allocation is not None and int(allocation["units"].sum()) == 0:
+                allocation, error = None, "No complete intervention fits the current budget, volunteer capacity and planning horizon."
             result["allocation"], result["error"] = allocation, error
             if allocation is not None:
-                result["schedule"] = schedule_interventions(allocation[allocation.units > 0].copy(), int(volunteers), float(hours), horizon, ops)
-                scheduled_units = int(result["schedule"]["Units Started"].sum()) if not result["schedule"].empty else 0
-                allocated_units = int(allocation["units"].sum())
-                if scheduled_units != allocated_units:
-                    result["allocation"] = None
-                    result["schedule"] = pd.DataFrame()
-                    result["error"] = "The selected allocation could not be fully scheduled within the available working capacity. Reduce the allocation or adjust the planning inputs."
+                active = allocation[allocation.units > 0].copy()
+                result["schedule"] = schedule_interventions(active, int(volunteers), float(hours_per_day), horizon, ops)
         st.session_state.plan = result
 
     plan = st.session_state.plan
     if plan is None:
-        st.markdown('<div class="info-card">Set the planning inputs and run an allocation to build a practical programme and calendar.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="brand-card">Set the planning inputs and run an allocation to build a programme portfolio and calendar.</div>', unsafe_allow_html=True)
     elif plan["allocation"] is None:
         if plan["budget"] == 0:
-            st.markdown('<div class="section">Volunteer-led routes</div>', unsafe_allow_html=True)
-            st.dataframe(plan["schedule"], use_container_width=True, hide_index=True)
+            st.markdown('<div class="section">Volunteer-Led Options</div>', unsafe_allow_html=True)
+            if plan["schedule"].empty:
+                st.info("Add at least one volunteer to explore no-budget opportunities.")
+            else:
+                st.dataframe(plan["schedule"], use_container_width=True, hide_index=True)
         else:
             st.error(plan["error"] or "No complete intervention fits the selected resources.")
+            options = []
+            for item in distribution_items:
+                units, remaining = quick_impact(rates, item, plan["budget"])
+                if units > 0:
+                    options.append({"Item": item, "Complete Units": units, "Budget Used": plan["budget"] - remaining, "Remaining": remaining})
+            if options:
+                st.markdown('<div class="section">Direct-Support Alternatives</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame(options).sort_values(["Remaining", "Complete Units"], ascending=[True, False]), use_container_width=True, hide_index=True, column_config={"Budget Used": st.column_config.NumberColumn(format="₹%,.0f"), "Remaining": st.column_config.NumberColumn(format="₹%,.0f")})
     else:
-        active = plan["allocation"].copy()
+        active = plan["allocation"][plan["allocation"].units > 0].copy()
         used_budget = float(active.allocated_budget.sum())
         used_hours = float(active.volunteer_hours.sum())
         capacity = float(active.planned_beneficiaries.sum())
-        k = st.columns(4)
-        k[0].metric("Budget Used", money(used_budget))
-        k[1].metric("Budget Remaining", money(max(0, plan["budget"] - used_budget)))
-        k[2].metric("Volunteer Hours", f"{used_hours:,.2f}")
-        k[3].metric("Planned Direct Capacity", f"{capacity:,.0f}")
+        schedule = plan["schedule"]
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric("Budget Used", money(used_budget))
+        k2.metric("Budget Remaining", money(max(0, plan["budget"] - used_budget)))
+        k3.metric("Volunteer Hours", f"{used_hours:,.2f}")
+        k4.metric("Planned Direct Capacity", f"{capacity:,.0f}")
+        k5.metric("Active Interventions", f"{len(active)}")
 
         st.markdown('<div class="section">Recommended Programme</div>', unsafe_allow_html=True)
-        table = active[["project","intervention","category","units","allocated_budget","volunteer_hours","planned_beneficiaries"]].copy()
-        table.columns = ["Project","Intervention","Category","Complete Units","Budget","Volunteer Hours","Capacity"]
-        st.dataframe(table, use_container_width=True, hide_index=True, column_config={"Budget":st.column_config.NumberColumn(format="₹%,.0f"),"Volunteer Hours":st.column_config.NumberColumn(format="%.2f"),"Capacity":st.column_config.NumberColumn(format="%.0f")})
-        if plan["budget"] > used_budget + .01:
-            st.info(f"{money(plan['budget']-used_budget)} remains unallocated because the current routes are limited by complete units, cadence and volunteer capacity. The optimizer does not invent partial interventions.")
+        table = active[["project", "intervention", "category", "units", "allocated_budget", "volunteer_hours", "planned_beneficiaries"]].copy()
+        table.columns = ["Project", "Intervention", "Category", "Complete Units", "Allocated Budget", "Volunteer Hours", "Planned Capacity"]
+        st.dataframe(table, use_container_width=True, hide_index=True, column_config={"Allocated Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.2f"), "Planned Capacity": st.column_config.NumberColumn(format="%.0f")})
 
-        schedule = plan["schedule"].copy()
+        if plan["budget"] > used_budget + 0.01:
+            st.info(f"{money(plan['budget'] - used_budget)} remains unallocated because the current programme portfolio is constrained by complete intervention units, weekly cadence and available delivery capacity. Review Direct-Support options rather than forcing partial activities.")
+
         if not schedule.empty:
-            st.markdown(f'<div class="section">Programme Calendar — {horizon.days // 5 if horizon.days >= 5 else 1} Weeks</div>', unsafe_allow_html=True)
-            weekly = schedule.groupby(["Week Number","Week"], sort=True).agg(Activities=("Intervention","nunique"), Units=("Units Started","sum"), Budget=("Allocated Budget","sum"), VolunteerHours=("Volunteer Hours","sum"), Capacity=("Planned Capacity","sum")).reset_index()
-            st.dataframe(weekly, use_container_width=True, hide_index=True, column_config={"Budget":st.column_config.NumberColumn(format="₹%,.0f"),"VolunteerHours":st.column_config.NumberColumn(format="%.2f"),"Capacity":st.column_config.NumberColumn(format="%.0f")})
+            st.markdown('<div class="section">Programme Calendar</div>', unsafe_allow_html=True)
+            schedule["Day Number"] = schedule["Day"].str.extract(r"(\d+)")[0].astype(int)
+            weekly = schedule.groupby("Week", sort=True).agg(
+                Activities=("Intervention", "nunique"),
+                Units=("Units Started", "sum"),
+                Budget=("Allocated Budget", "sum"),
+                VolunteerHours=("Volunteer Hours", "sum"),
+                PlannedCapacity=("Planned Capacity", "sum"),
+            ).reset_index()
+            st.dataframe(weekly, use_container_width=True, hide_index=True, column_config={"Budget": st.column_config.NumberColumn(format="₹%,.0f"), "VolunteerHours": st.column_config.NumberColumn(format="%.2f"), "PlannedCapacity": st.column_config.NumberColumn(format="%.0f")})
             with st.expander("View detailed schedule"):
-                st.dataframe(schedule, use_container_width=True, hide_index=True, column_config={"Allocated Budget":st.column_config.NumberColumn(format="₹%,.0f"),"Volunteer Hours":st.column_config.NumberColumn(format="%.2f"),"Elapsed Hours":st.column_config.NumberColumn(format="%.2f"),"Planned Capacity":st.column_config.NumberColumn(format="%.0f")})
+                detail = schedule.drop(columns="Day Number")
+                st.dataframe(detail, use_container_width=True, hide_index=True, column_config={"Allocated Budget": st.column_config.NumberColumn(format="₹%,.0f"), "Volunteer Hours": st.column_config.NumberColumn(format="%.2f"), "Elapsed Hours": st.column_config.NumberColumn(format="%.2f"), "Planned Capacity": st.column_config.NumberColumn(format="%.0f")})
 
-            st.markdown('<div class="section">Programme Communication</div>', unsafe_allow_html=True)
-            selected = st.selectbox("Select an intervention", active["intervention"].tolist(), key="communication_intervention")
-            row = active[active["intervention"] == selected].iloc[0]
-            hooks, body, professional = communication_copy(selected, row, plan["distribution_item"])
-            hook = st.selectbox("Hook", hooks, key="communication_hook")
-            x, y = st.columns(2)
-            with x: st.text_area("Social Caption", f"{hook}\n\n{body}\n\nCTA: Follow the programme, volunteer or support the approved intervention.", height=210)
-            with y: st.text_area("Professional / CSR Update", professional, height=210)
-            st.download_button("Download Allocation CSV", table.to_csv(index=False).encode("utf-8"), "inamigos_resource_allocation.csv", "text/csv", use_container_width=True)
+            weeks = []
+            for week_name, group in schedule.groupby("Week", sort=True):
+                names = ", ".join(dict.fromkeys(group["Intervention"].tolist()))
+                week_no = int(str(week_name).split()[-1])
+                focus = "Programme launch and field setup" if week_no == 1 else ("Progress review and impact update" if week_no % 4 == 0 else "Delivery and field documentation")
+                weeks.append({"Period": week_name, "Programme focus": names, "Communication focus": focus})
+            st.markdown('<div class="section">Communication Timeline</div>', unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame(weeks), use_container_width=True, hide_index=True)
+
+        st.markdown('<div class="section">Programme Communication</div>', unsafe_allow_html=True)
+        selected = st.selectbox("Select an intervention", active["intervention"].tolist(), key="content_intervention")
+        row = active[active["intervention"] == selected].iloc[0]
+        hooks, body, professional = build_content(selected, row, plan["distribution_item"])
+        hook = st.selectbox("Hook", hooks, key="content_hook")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.text_area("Social Caption", f"{hook}\n\n{body}\n\nCTA: Follow the programme, volunteer or support the approved intervention.", height=220)
+        with c2:
+            st.text_area("Professional / CSR Update", professional, height=220)
+
+        st.download_button("Download Allocation CSV", table.to_csv(index=False).encode("utf-8"), "inamigos_resource_allocation.csv", "text/csv", use_container_width=True)
 
 with quick_tab:
-    st.markdown('<div class="section">Quick Impact Calculator</div>', unsafe_allow_html=True)
-    q1, q2 = st.columns(2)
-    with q1: qb = st.number_input("Budget to Evaluate (₹)", min_value=0.0, value=500.0, step=50.0, key="quick_budget")
-    with q2: qi = st.selectbox("Support Item", distribution_items, index=0, key="quick_item")
-    units, remaining = quick_impact(rates, qi, qb)
-    a,b = st.columns(2); a.metric("Complete Units", f"{units:,}"); b.metric("Remaining Budget", money(remaining))
-    st.info(f"{money(qb)} can provide {units:,} complete {qi.lower()} unit(s) at the configured rate.")
-    comparison=[]
+    st.markdown('<div class="section">Quick Impact</div>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        quick_budget = st.number_input("Budget to Evaluate (₹)", min_value=0.0, value=500.0, step=50.0, key="quick_budget")
+    with c2:
+        quick_item = st.selectbox("Item", distribution_items, index=min(distribution_items.index("Meal for 1 person"), len(distribution_items)-1), key="quick_item")
+    units, remaining = quick_impact(rates, quick_item, quick_budget)
+    a, b = st.columns(2)
+    a.metric("Complete Units", f"{units:,}")
+    b.metric("Remaining Budget", money(remaining))
+    st.info(f"{money(quick_budget)} can provide {units:,} complete {quick_item} unit(s) at the current configured rate.")
+    comparison = []
     for item in distribution_items:
-        u,r=quick_impact(rates,item,qb); comparison.append({"Item":item,"Complete Units":u,"Budget Used":qb-r,"Remaining":r})
-    st.dataframe(pd.DataFrame(comparison), use_container_width=True, hide_index=True, column_config={"Budget Used":st.column_config.NumberColumn(format="₹%,.0f"),"Remaining":st.column_config.NumberColumn(format="₹%,.0f")})
+        u, r = quick_impact(rates, item, quick_budget)
+        comparison.append({"Item": item, "Complete Units": u, "Budget Used": quick_budget - r, "Remaining": r})
+    st.dataframe(pd.DataFrame(comparison), use_container_width=True, hide_index=True, column_config={"Budget Used": st.column_config.NumberColumn(format="₹%,.0f"), "Remaining": st.column_config.NumberColumn(format="₹%,.0f")})
+    if quick_budget == 0:
+        st.markdown('<div class="section">No-Budget Volunteer Options</div>', unsafe_allow_html=True)
+        st.dataframe(volunteer_only_options(cfg, int(volunteers), float(hours_per_day)), use_container_width=True, hide_index=True)
 
 with coverage_tab:
-    st.markdown('<div class="section">InAmigos Programme Coverage</div>', unsafe_allow_html=True)
-    st.caption("The programme catalogue follows the initiatives described on the public InAmigos Foundation website. Costs are only used in the optimizer where a configured rate or operating rule exists.")
-    catalog = project_catalog()
-    for start in range(0, len(catalog), 2):
-        cols = st.columns(2)
-        for j, (_, r) in enumerate(catalog.iloc[start:start+2].iterrows()):
-            with cols[j]:
-                st.markdown(f'<div class="project-card"><div class="project-name">{r.Project}</div><span class="badge">{r.Area}</span><p class="muted">{r["What the project covers"]}</p><b>{r["Planning route"]}</b></div>', unsafe_allow_html=True)
-    st.markdown('<div class="section">Volunteer-led options</div>', unsafe_allow_html=True)
-    st.dataframe(volunteer_only_options(cfg, int(volunteers), float(hours)), use_container_width=True, hide_index=True)
+    st.markdown('<div class="section">Project Coverage</div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand-card">All six named InAmigos projects are represented here. Budgeted interventions use configured rates; projects without verified cost rules are kept field-configured rather than assigned invented prices.</div>', unsafe_allow_html=True)
+    st.dataframe(project_catalog(), use_container_width=True, hide_index=True)
 
 with settings_tab:
-    st.markdown('<div class="section">Rates & Operating Rules</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section">Settings</div>', unsafe_allow_html=True)
     with st.form("settings_form"):
-        st.markdown("#### Direct-support rates")
-        edited_rates={}
-        cols=st.columns(3)
-        for i,item in enumerate(rates):
-            with cols[i%3]: edited_rates[item]=st.number_input(item,min_value=.01,value=float(rates[item]),step=1.0,key=f"rate_{item}")
-        st.markdown("#### Operating rules")
-        cols=st.columns(3)
-        editable=[
-            ("hours_per_working_day","Working hours / day",.5),("learning_session_hours","Learning session hours",.5),
-            ("learning_volunteers_per_team","Volunteers per learning team",1.0),("learning_children_per_session","Children per learning cycle",1.0),
-            ("stationery_recipients_per_education_cycle","Stationery recipients per cycle",1.0),("cleaning_volunteer_hours","Cleaning volunteer-hours",1.0),
-            ("plantation_volunteer_hours","Plantation volunteer-hours",1.0),("plantation_saplings_per_activity","Saplings per plantation activity",1.0),
-            ("distribution_duration_hours","Distribution duration hours",.5),("distribution_items_per_volunteer_per_hour","Distribution items / volunteer / hour",1.0),
-        ]
-        edited_ops=dict(ops)
-        for i,(key,label,step) in enumerate(editable):
-            with cols[i%3]: edited_ops[key]=st.number_input(label,min_value=.01,value=float(ops[key]),step=float(step),key=f"op_{key}")
-        submitted=st.form_submit_button("Apply Settings",use_container_width=True)
-        if submitted:
-            new_cfg={**cfg,"rates":edited_rates,"operations":edited_ops}
-            try:
-                validate_config(new_cfg); st.session_state.cfg=new_cfg; st.session_state.plan=None; st.success("Settings applied for this session.")
-            except ValueError as exc: st.error(str(exc))
-    st.download_button("Download Settings",json.dumps(cfg,indent=2).encode(),"inamigos_optimizer_settings.json","application/json",use_container_width=True)
-    incoming=st.file_uploader("Load Settings",type=["json"])
-    if incoming:
-        try:
-            new_cfg=json.loads(incoming.read().decode()); validate_config(new_cfg); st.session_state.cfg=new_cfg; st.session_state.plan=None; st.success("Settings loaded successfully.")
-        except Exception as exc: st.error(f"Settings could not be loaded: {exc}")
+        st.markdown("#### Direct-Support Rates")
+        rate_cols = st.columns(3)
+        edited_rates = {}
+        for idx, item in enumerate(rates):
+            with rate_cols[idx % 3]:
+                edited_rates[item] = st.number_input(item, min_value=0.01, value=float(rates[item]), step=1.0, key=f"rate_{item}")
 
-st.markdown('<div class="muted" style="text-align:center;margin:28px 0 8px;">InAmigos Foundation • Resource Allocation Optimizer</div>', unsafe_allow_html=True)
+        st.markdown("#### Operating Rules")
+        op_cols = st.columns(3)
+        editable_ops = [
+            ("cleaning_volunteer_hours", "Cleaning volunteer-hours", 1.0),
+            ("plantation_volunteer_hours", "Plantation volunteer-hours", 1.0),
+            ("plantation_saplings_per_activity", "Saplings per plantation activity", 1.0),
+            ("distribution_duration_hours", "Distribution duration (hours)", 0.5),
+            ("distribution_items_per_volunteer_per_hour", "Distribution items / volunteer / hour", 1.0),
+            ("learning_session_hours", "Learning session duration (hours)", 0.5),
+            ("learning_volunteers_per_team", "Volunteers per learning team", 1.0),
+            ("learning_teams_per_session", "Learning teams per session", 1.0),
+            ("learning_children_per_session", "Children per learning cycle", 1.0),
+            ("stationery_recipients_per_education_cycle", "Stationery recipients per education cycle", 1.0),
+            ("hours_per_working_day", "Working hours per day", 0.5),
+            ("education_max_per_week", "Education cycles / week", 1.0),
+            ("cleaning_max_per_week", "Cleaning drives / week", 1.0),
+            ("plantation_max_per_week", "Plantation activities / week", 1.0),
+            ("distribution_max_per_week", "Distribution events / week", 1.0),
+            ("education_min_gap_days", "Education minimum gap (days)", 1.0),
+            ("cleaning_min_gap_days", "Cleaning minimum gap (days)", 1.0),
+            ("plantation_min_gap_days", "Plantation minimum gap (days)", 1.0),
+            ("distribution_min_gap_days", "Distribution minimum gap (days)", 1.0),
+        ]
+        edited_ops = dict(ops)
+        for idx, (key, label, step) in enumerate(editable_ops):
+            with op_cols[idx % 3]:
+                edited_ops[key] = st.number_input(label, min_value=0.01, value=float(ops[key]), step=float(step), key=f"op_{key}")
+
+        submitted = st.form_submit_button("Apply Settings", use_container_width=True)
+        if submitted:
+            new_cfg = {**cfg, "rates": edited_rates, "operations": edited_ops}
+            try:
+                validate_config(new_cfg)
+                st.session_state.cfg = new_cfg
+                st.session_state.plan = None
+                st.success("Settings applied for the current session.")
+            except ValueError as exc:
+                st.error(str(exc))
+
+    st.download_button("Download Settings", json.dumps(cfg, indent=2).encode("utf-8"), "inamigos_optimizer_settings.json", "application/json", use_container_width=True)
+    incoming = st.file_uploader("Load Settings", type=["json"])
+    if incoming is not None:
+        try:
+            incoming_cfg = json.loads(incoming.read().decode("utf-8"))
+            validate_config(incoming_cfg)
+            st.session_state.cfg = incoming_cfg
+            st.session_state.plan = None
+            st.success("Settings loaded successfully for the current session.")
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            st.error(f"Settings could not be loaded: {exc}")
+
+st.markdown('<div class="small" style="text-align:center;margin-top:24px;">InAmigos Foundation • Resource Allocation Optimizer</div>', unsafe_allow_html=True)
